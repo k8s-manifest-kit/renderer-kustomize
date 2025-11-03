@@ -9,6 +9,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
 	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 	jqmatcher "github.com/lburgazzoli/gomega-matchers/pkg/matchers/jq"
 	"github.com/rs/xid"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
@@ -1150,8 +1151,15 @@ func TestLoadRestrictions(t *testing.T) {
 				}),
 			},
 		},
-			kustomize.WithCache(),
-			kustomize.WithCacheKeyFunc(kustomize.FastCacheKey()),
+			kustomize.WithCache(
+				cache.WithKeyFunc(func(key any) string {
+					if spec, ok := key.(kustomize.KustomizationSpec); ok {
+						return spec.Path
+					}
+
+					return cache.DefaultKeyFunc(key)
+				}),
+			),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 

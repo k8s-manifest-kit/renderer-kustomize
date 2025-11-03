@@ -6,8 +6,6 @@ import (
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
-
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // RendererOption is a generic option for RendererOptions.
@@ -24,8 +22,8 @@ type RendererOptions struct {
 	// Plugins are kustomize-native transformer plugins applied during kustomize build.
 	Plugins []resmap.Transformer
 
-	// Cache is a custom cache implementation for render results.
-	Cache cache.Interface[[]unstructured.Unstructured]
+	// CacheOptions holds cache configuration. nil = caching disabled.
+	CacheOptions *cache.Options
 
 	// SourceAnnotations enables automatic addition of source tracking annotations.
 	SourceAnnotations bool
@@ -34,10 +32,6 @@ type RendererOptions struct {
 	// Individual Sources can override this via Source.LoadRestrictions.
 	// Default: LoadRestrictionsRootOnly (security best practice).
 	LoadRestrictions kustomizetypes.LoadRestrictions
-
-	// CacheKeyFunc customizes how cache keys are generated from kustomization specifications.
-	// If nil, DefaultCacheKey is used.
-	CacheKeyFunc CacheKeyFunc
 }
 
 // ApplyTo applies the renderer options to the target configuration.
@@ -47,15 +41,14 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	target.Plugins = opts.Plugins
 	target.LoadRestrictions = opts.LoadRestrictions
 
-	if opts.Cache != nil {
-		target.Cache = opts.Cache
+	if opts.CacheOptions != nil {
+		if target.CacheOptions == nil {
+			target.CacheOptions = &cache.Options{}
+		}
+		opts.CacheOptions.ApplyTo(target.CacheOptions)
 	}
 
 	target.SourceAnnotations = opts.SourceAnnotations
-
-	if opts.CacheKeyFunc != nil {
-		target.CacheKeyFunc = opts.CacheKeyFunc
-	}
 }
 
 // WithFilter adds a renderer-specific filter to this Kustomize renderer's processing chain.
@@ -88,7 +81,13 @@ func WithPlugin(plugin resmap.Transformer) RendererOption {
 // By default, caching is NOT enabled.
 func WithCache(opts ...cache.Option) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
-		rendererOpts.Cache = cache.NewRenderCache(opts...)
+		if rendererOpts.CacheOptions == nil {
+			rendererOpts.CacheOptions = &cache.Options{}
+		}
+
+		for _, opt := range opts {
+			opt.ApplyTo(rendererOpts.CacheOptions)
+		}
 	})
 }
 
@@ -111,17 +110,5 @@ func WithSourceAnnotations(enabled bool) RendererOption {
 func WithLoadRestrictions(restrictions kustomizetypes.LoadRestrictions) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.LoadRestrictions = restrictions
-	})
-}
-
-// WithCacheKeyFunc sets a custom cache key generation function.
-// Built-in options: DefaultCacheKey (default), FastCacheKey, PathOnlyCacheKey.
-//
-// Example:
-//
-//	kustomize.WithCacheKeyFunc(kustomize.FastCacheKey())
-func WithCacheKeyFunc(fn CacheKeyFunc) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
-		opts.CacheKeyFunc = fn
 	})
 }

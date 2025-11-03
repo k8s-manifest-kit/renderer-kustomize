@@ -6,6 +6,7 @@ import (
 
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -47,6 +48,7 @@ type Renderer struct {
 	fs     filesys.FileSystem
 	engine *Engine
 	opts   *RendererOptions
+	cache  cache.Interface[[]unstructured.Unstructured]
 }
 
 // New creates a new kustomize renderer.
@@ -62,11 +64,6 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	// Apply all options to RendererOptions
 	for _, opt := range opts {
 		opt.ApplyTo(&rendererOpts)
-	}
-
-	// Set default cache key function if not provided
-	if rendererOpts.CacheKeyFunc == nil {
-		rendererOpts.CacheKeyFunc = DefaultCacheKey()
 	}
 
 	// Wrap sources in holders and validate
@@ -86,6 +83,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		fs:     fs,
 		engine: newKustomizeEngine(fs, &rendererOpts),
 		opts:   &rendererOpts,
+		cache:  newCache(rendererOpts.CacheOptions),
 	}
 
 	return r, nil
@@ -138,19 +136,17 @@ func (r *Renderer) renderSingle(
 		)
 	}
 
-	var cacheKey string
+	spec := KustomizationSpec{
+		Path:   holder.Path,
+		Values: values,
+	}
 
 	// Check cache (if enabled)
-	if r.opts.Cache != nil {
-		cacheKey = r.opts.CacheKeyFunc(KustomizationSpec{
-			Path:   holder.Path,
-			Values: values,
-		})
-
+	if r.cache != nil {
 		// ensure objects are evicted
-		r.opts.Cache.Sync()
+		r.cache.Sync()
 
-		if cached, found := r.opts.Cache.Get(cacheKey); found {
+		if cached, found := r.cache.Get(spec); found {
 			return cached, nil
 		}
 	}
@@ -162,8 +158,8 @@ func (r *Renderer) renderSingle(
 	}
 
 	// Cache result (if enabled)
-	if r.opts.Cache != nil {
-		r.opts.Cache.Set(cacheKey, result)
+	if r.cache != nil {
+		r.cache.Set(spec, result)
 	}
 
 	return result, nil
