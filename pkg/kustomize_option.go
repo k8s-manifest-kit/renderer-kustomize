@@ -6,6 +6,7 @@ import (
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 // RendererOption is a generic option for RendererOptions.
@@ -36,6 +37,11 @@ type RendererOptions struct {
 	// WarningHandler is called when kustomize deprecation warnings are detected.
 	// If nil, warnings are logged to os.Stderr by default.
 	WarningHandler WarningHandler
+
+	// FileSystem specifies a custom filesystem to use for kustomize operations.
+	// If nil, uses the OS filesystem (filesys.MakeFsOnDisk()).
+	// This allows using embedded filesystems, in-memory filesystems, or custom implementations.
+	FileSystem filesys.FileSystem
 }
 
 // ApplyTo applies the renderer options to the target configuration.
@@ -54,6 +60,10 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 
 	target.SourceAnnotations = opts.SourceAnnotations
 	target.WarningHandler = opts.WarningHandler
+
+	if opts.FileSystem != nil {
+		target.FileSystem = opts.FileSystem
+	}
 }
 
 // WithFilter adds a renderer-specific filter to this Kustomize renderer's processing chain.
@@ -131,5 +141,28 @@ func WithLoadRestrictions(restrictions kustomizetypes.LoadRestrictions) Renderer
 func WithWarningHandler(handler WarningHandler) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.WarningHandler = handler
+	})
+}
+
+// WithFileSystem sets a custom filesystem for kustomize operations.
+// This allows using embedded filesystems (via embed.FS), in-memory filesystems for testing,
+// or any custom filesystem implementation.
+//
+// Default: Uses OS filesystem (filesys.MakeFsOnDisk()) if not set.
+//
+// Example with embedded filesystem:
+//
+//	//go:embed kustomizations/*
+//	var embeddedFS embed.FS
+//	fs, _ := fs.NewFromIOFS(embeddedFS, "kustomizations")
+//	renderer := kustomize.New(sources, kustomize.WithFileSystem(fs))
+//
+// Example with in-memory filesystem:
+//
+//	memFs := fs.NewMemoryFs()
+//	renderer := kustomize.New(sources, kustomize.WithFileSystem(memFs))
+func WithFileSystem(fs filesys.FileSystem) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.FileSystem = fs
 	})
 }

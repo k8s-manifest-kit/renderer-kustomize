@@ -28,10 +28,12 @@ The Kustomize renderer provides native integration with Kustomize, enabling prog
    - Handles filesystem abstractions
    - Manages plugin configuration
 
-5. **UnionFS** (`pkg/unionfs/`)
-   - Custom union filesystem implementation
-   - Layers in-memory overrides over delegate filesystem
-   - Enables dynamic ConfigMap injection for values
+5. **Filesystem Adapters** (`pkg/fs/`)
+   - Afero-based implementation of `filesys.FileSystem`
+   - Supports embedded, in-memory, and union filesystems
+   - Organized by type: `pkg/fs/union/` for union filesystems
+   - Flexible storage backends via functional options
+   - See [Filesystem Adapters Guide](fs-adapter.md)
 
 6. **Engine Convenience** (`pkg/engine.go`)
    - `NewEngine()` function for simple single-kustomization scenarios
@@ -42,9 +44,13 @@ The Kustomize renderer provides native integration with Kustomize, enabling prog
 ### 1. Filesystem Abstraction
 
 The renderer uses Kustomize's `filesys.FileSystem` interface, enabling:
-- Local filesystem access via `filesys.MakeFsOnDisk()`
-- In-memory overlays via `unionfs` for dynamic value injection
+- Local filesystem access via `filesys.MakeFsOnDisk()` or `fs.NewFsOnDisk()`
+- In-memory filesystems via `fs.NewMemoryFs()`
+- Embedded filesystems via `fs.NewFromIOFS()` (e.g., embed.FS)
+- Union filesystems via `fs.NewUnionFs()` for dynamic value injection
 - Testing with mock filesystems
+
+See [Filesystem Adapters](fs-adapter.md) for detailed usage guide.
 
 ### 2. Dynamic Values via ConfigMap
 
@@ -126,4 +132,15 @@ Potential areas for expansion:
 2. Remote base references (e.g., GitHub)
 3. Helm chart transformer integration
 4. Advanced patching strategies
+
+## Recent Changes
+
+- **v0.x.x**: Migrated from `pkg/unionfs/` to `pkg/fs/union/` with functional options pattern
+- Refactored filesystem adapters into subpackages by type
+- Added support for embedded filesystems via `io.FS` integration
+
+## Related Documentation
+
+- [Filesystem Adapters Guide](fs-adapter.md) - Comprehensive guide to filesystem implementations
+- [Development Guide](development.md) - Development workflow and guidelines
 

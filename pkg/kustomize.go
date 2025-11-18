@@ -12,6 +12,8 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
 )
 
 const rendererType = "kustomize"
@@ -77,11 +79,16 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		}
 	}
 
-	fs := filesys.MakeFsOnDisk()
+	// Use custom filesystem if provided, otherwise default to OS filesystem
+	fsys := rendererOpts.FileSystem
+	if fsys == nil {
+		fsys = fs.NewFsOnDisk()
+	}
+
 	r := &Renderer{
 		inputs: holders,
-		fs:     fs,
-		engine: newKustomizeEngine(fs, &rendererOpts),
+		fs:     fsys,
+		engine: newKustomizeEngine(fsys, &rendererOpts),
 		opts:   &rendererOpts,
 		cache:  newCache(rendererOpts.CacheOptions),
 	}

@@ -5,16 +5,19 @@
 This is the **Kustomize renderer** for the k8s-manifest-kit ecosystem. It provides programmatic rendering of Kustomize overlays with features like caching, filtering, transformation, and source tracking.
 
 ### Repository Structure
-- `pkg/` - Main renderer implementation and unionfs package
+- `pkg/` - Main renderer implementation and filesystem adapters
+- `pkg/fs/` - Afero-based filesystem adapter with subpackages by type
+- `pkg/fs/union/` - Union filesystem implementation
 - `config/test/kustomizations/` - Test fixtures
 - `docs/` - Architecture and development documentation
 
 ### Key Files
 - `pkg/kustomize.go` - Main renderer (`New()`, `Process()`)
-- `pkg/kustomize_option.go` - Functional options (`WithCache()`, etc.)
+- `pkg/kustomize_option.go` - Functional options (`WithCache()`, `WithFileSystem()`, etc.)
 - `pkg/kustomize_engine.go` - Kustomize SDK wrapper
 - `pkg/engine.go` - Convenience function (`NewEngine()`)
-- `pkg/unionfs/` - Union filesystem for dynamic value injection
+- `pkg/fs/` - Filesystem adapters for flexible storage backends
+- `pkg/fs/union/` - Union filesystem for dynamic value injection
 
 ### Related Repositories
 - `github.com/k8s-manifest-kit/engine` - Core engine and types
@@ -102,12 +105,14 @@ The renderer is thread-safe:
 - Per-operation filesystem instances
 - Cache has built-in concurrency support
 
-### UnionFS
-Custom union filesystem (`pkg/unionfs/`) layers in-memory files over a delegate:
-- Memory layer: Dynamic values, patched kustomizations
-- Delegate layer: Actual filesystem (disk or mock)
-- Read precedence: memory first, then delegate
-- Write: always to memory layer
+### Filesystem Adapters
+Afero-based filesystem adapters (`pkg/fs/`):
+- Supports embedded filesystems (embed.FS)
+- In-memory filesystems for testing
+- Union filesystems with functional options (`pkg/fs/union/`)
+- Read-only wrappers and base path restrictions
+- Organized by filesystem type in subpackages
+- See `docs/fs-adapter.md` for details
 
 ### Pipeline Integration
 The renderer integrates with the three-level pipeline:
@@ -165,7 +170,8 @@ kustomize.Source{
 
 Check:
 1. `docs/design.md` - Architecture and design decisions
-2. `docs/development.md` - Development workflow
-3. `pkg/*_test.go` - Usage examples
-4. Parent repository documentation at github.com/k8s-manifest-kit
+2. `docs/fs-adapter.md` - Filesystem adapters guide
+3. `docs/development.md` - Development workflow
+4. `pkg/*_test.go` - Usage examples
+5. Parent repository documentation at github.com/k8s-manifest-kit
 

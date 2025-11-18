@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/unionfs"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/union"
 	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util"
 )
 
@@ -145,7 +145,7 @@ func (e *Engine) prepareFilesystem(
 		return nil, false, fmt.Errorf("path %q: %w", inputPath, ErrPathMustBeDirectory)
 	}
 
-	builder := unionfs.NewBuilder(e.fs)
+	var opts []union.Option
 	addedOriginAnnotations := false
 
 	// Add modified kustomization if source annotations are enabled
@@ -159,7 +159,7 @@ func (e *Engine) prepareFilesystem(
 				return nil, false, fmt.Errorf("failed to marshal kustomization: %w", err)
 			}
 
-			builder.WithOverride(filepath.Join(p.String(), kustName), data)
+			opts = append(opts, union.WithOverride(filepath.Join(p.String(), kustName), data))
 		}
 	}
 
@@ -169,15 +169,15 @@ func (e *Engine) prepareFilesystem(
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to create values ConfigMap: %w", err)
 		}
-		builder.WithOverride(filepath.Join(p.String(), "values.yaml"), valuesContent)
+		opts = append(opts, union.WithOverride(filepath.Join(p.String(), "values.yaml"), valuesContent))
 	}
 
-	fs, err := builder.Build()
+	fsys, err := union.NewFs(e.fs, opts...)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to create union filesystem: %w", err)
 	}
 
-	return fs, addedOriginAnnotations, nil
+	return fsys, addedOriginAnnotations, nil
 }
 
 // addSourceAnnotationsToObject adds source tracking annotations to a single unstructured object.
