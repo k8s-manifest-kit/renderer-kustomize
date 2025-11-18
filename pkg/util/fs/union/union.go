@@ -103,19 +103,21 @@ func NewFs(base filesys.FileSystem, opts ...Option) (filesys.FileSystem, error) 
 		}
 	}
 
-	baseAdapter, ok := base.(interface{ Unwrap() afero.Fs })
+	baseUnwrapper, ok := base.(interface{ Unwrap() afero.Fs })
 	if !ok {
 		return nil, errors.New("base filesystem must be created with fs package functions") //nolint:err113
 	}
+	baseFs := baseUnwrapper.Unwrap()
 
-	overlayAdapter, ok := overlay.(interface{ Unwrap() afero.Fs })
+	overlayUnwrapper, ok := overlay.(interface{ Unwrap() afero.Fs })
 	if !ok {
 		return nil, errors.New("overlay filesystem must be created with fs package functions") //nolint:err113
 	}
+	overlayFs := overlayUnwrapper.Unwrap()
 
 	// Use Afero's CopyOnWriteFs to create a union filesystem
 	// CopyOnWriteFs writes go to the overlay, reads check overlay first then base
-	unionFs := afero.NewCopyOnWriteFs(baseAdapter.Unwrap(), overlayAdapter.Unwrap())
+	unionFs := afero.NewCopyOnWriteFs(baseFs, overlayFs)
 
 	return adapter.New(unionFs), nil
 }
