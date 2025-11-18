@@ -1,6 +1,6 @@
 # Filesystem Adapters for Kustomize
 
-This package provides an Afero-based filesystem adapter that implements kustomize's `filesys.FileSystem` interface, enabling flexible filesystem implementations for kustomize operations.
+The `pkg/util/fs` package provides an Afero-based filesystem adapter that implements kustomize's `filesys.FileSystem` interface, enabling flexible filesystem implementations for kustomize operations.
 
 ## Features
 
@@ -155,8 +155,8 @@ fs, err := builder.Build()
 
 ```go
 import (
-    "github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
-    "github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/union"
+    "github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs"
+    "github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/union"
 )
 
 unionFs, err := union.NewFs(baseFs,

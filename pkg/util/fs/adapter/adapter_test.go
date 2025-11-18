@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/adapter"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/adapter"
 
 	. "github.com/onsi/gomega"
 )

@@ -28,10 +28,10 @@ The Kustomize renderer provides native integration with Kustomize, enabling prog
    - Handles filesystem abstractions
    - Manages plugin configuration
 
-5. **Filesystem Adapters** (`pkg/fs/`)
+5. **Filesystem Adapters** (`pkg/util/fs/`)
    - Afero-based implementation of `filesys.FileSystem`
    - Supports embedded, in-memory, and union filesystems
-   - Organized by type: `pkg/fs/union/` for union filesystems
+   - Organized by type: `pkg/util/fs/union/` for union filesystems
    - Flexible storage backends via functional options
    - See [Filesystem Adapters Guide](fs-adapter.md)
 
@@ -130,10 +130,10 @@ This design philosophy ensures the library remains a **professional, maintainabl
 ### 1. Filesystem Abstraction
 
 The renderer uses Kustomize's `filesys.FileSystem` interface, enabling:
-- Local filesystem access via `filesys.MakeFsOnDisk()` or `fs.NewFsOnDisk()`
-- In-memory filesystems via `fs.NewMemoryFs()`
-- Embedded filesystems via `fs.NewFromIOFS()` (e.g., embed.FS)
-- Union filesystems via `fs.NewUnionFs()` for dynamic value injection
+- Local filesystem access via `filesys.MakeFsOnDisk()` or `utilfs.NewFsOnDisk()`
+- In-memory filesystems via `utilfs.NewMemoryFs()`
+- Embedded filesystems via `utilfs.NewFromIOFS()` (e.g., embed.FS)
+- Union filesystems via `utilfs.NewUnionFs()` for dynamic value injection
 - Testing with mock filesystems
 
 See [Filesystem Adapters](fs-adapter.md) for detailed usage guide.
@@ -221,9 +221,10 @@ Potential areas for expansion:
 
 ## Recent Changes
 
-- **v0.x.x**: Migrated from `pkg/unionfs/` to `pkg/fs/union/` with functional options pattern
-- Refactored filesystem adapters into subpackages by type
+- **v0.x.x**: Migrated from `pkg/unionfs/` to `pkg/util/fs/union/` with functional options pattern
+- Refactored filesystem adapters into subpackages by type under `pkg/util/`
 - Added support for embedded filesystems via `io.FS` integration
+- Reorganized package structure: moved `pkg/fs/` to `pkg/util/fs/` for better grouping
 
 ## Related Documentation
 

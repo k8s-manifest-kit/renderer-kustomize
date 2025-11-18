@@ -3,8 +3,8 @@ package union_test
 import (
 	"testing"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/union"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/union"
 
 	. "github.com/onsi/gomega"
 )

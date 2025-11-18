@@ -6,8 +6,9 @@ This is the **Kustomize renderer** for the k8s-manifest-kit ecosystem. It provid
 
 ### Repository Structure
 - `pkg/` - Main renderer implementation and filesystem adapters
-- `pkg/fs/` - Afero-based filesystem adapter with subpackages by type
-- `pkg/fs/union/` - Union filesystem implementation
+- `pkg/util/fs/` - Afero-based filesystem adapter with subpackages by type
+- `pkg/util/fs/union/` - Union filesystem implementation
+- `pkg/util/io/` - I/O utility functions (stderr suppression, etc.)
 - `config/test/kustomizations/` - Test fixtures
 - `docs/` - Architecture and development documentation
 
@@ -16,8 +17,9 @@ This is the **Kustomize renderer** for the k8s-manifest-kit ecosystem. It provid
 - `pkg/kustomize_option.go` - Functional options (`WithCache()`, `WithFileSystem()`, etc.)
 - `pkg/kustomize_engine.go` - Kustomize SDK wrapper
 - `pkg/engine.go` - Convenience function (`NewEngine()`)
-- `pkg/fs/` - Filesystem adapters for flexible storage backends
-- `pkg/fs/union/` - Union filesystem for dynamic value injection
+- `pkg/util/fs/` - Filesystem adapters for flexible storage backends
+- `pkg/util/fs/union/` - Union filesystem for dynamic value injection
+- `pkg/util/io/` - I/O utility functions
 
 ### Related Repositories
 - `github.com/k8s-manifest-kit/engine` - Core engine and types
@@ -106,10 +108,10 @@ The renderer is thread-safe:
 - Cache has built-in concurrency support
 
 ### Filesystem Adapters
-Afero-based filesystem adapters (`pkg/fs/`):
+Afero-based filesystem adapters (`pkg/util/fs/`):
 - Supports embedded filesystems (embed.FS)
 - In-memory filesystems for testing
-- Union filesystems with functional options (`pkg/fs/union/`)
+- Union filesystems with functional options (`pkg/util/fs/union/`)
 - Read-only wrappers and base path restrictions
 - Organized by filesystem type in subpackages
 - See `docs/fs-adapter.md` for details

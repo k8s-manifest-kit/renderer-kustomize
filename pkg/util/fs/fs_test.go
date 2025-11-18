@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs"
 
 	. "github.com/onsi/gomega"
 )

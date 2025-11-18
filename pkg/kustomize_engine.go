@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/union"
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/union"
+	utilio "github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/io"
 )
 
 type (
@@ -89,7 +89,7 @@ func (e *Engine) Run(input Source, values map[string]string) ([]unstructured.Uns
 
 	// Run kustomize with stderr suppressed to avoid duplicate warnings
 	var resMap resmap.ResMap
-	err = util.SuppressStderr(func() error {
+	err = utilio.SuppressStderr(func() error {
 		var runErr error
 		resMap, runErr = kustomizer.Run(fs, input.Path)
 		if runErr != nil {
