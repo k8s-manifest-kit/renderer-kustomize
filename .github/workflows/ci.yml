@@ -2,16 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   lint:
-    name: Lint
+    name: Check (Lint + Vulncheck)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -22,9 +22,9 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run linter
+      - name: Run checks
         run: |
-          make lint
+          make check
 
       - name: Verify formatting
         run: |
