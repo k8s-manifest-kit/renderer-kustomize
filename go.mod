@@ -8,7 +8,7 @@ require (
 	github.com/lburgazzoli/gomega-matchers v0.4.0
 	github.com/onsi/gomega v1.38.2
 	github.com/rs/xid v1.6.0
-	github.com/spf13/afero v1.11.0
+	github.com/spf13/afero v1.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.34.2
 	k8s.io/apimachinery v0.34.2
