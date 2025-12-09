@@ -6,7 +6,7 @@ require (
 	github.com/k8s-manifest-kit/engine v0.1.0
 	github.com/k8s-manifest-kit/pkg v0.1.0
 	github.com/lburgazzoli/gomega-matchers v0.4.0
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.38.3
 	github.com/rs/xid v1.6.0
 	github.com/spf13/afero v1.11.0
 	gopkg.in/yaml.v3 v3.0.1
