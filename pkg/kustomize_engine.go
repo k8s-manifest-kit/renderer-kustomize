@@ -137,12 +137,19 @@ func (e *Engine) prepareFilesystem(
 		return e.fs, false, nil
 	}
 
-	p, f, err := e.fs.CleanedAbs(inputPath)
+	_, f, err := e.fs.CleanedAbs(inputPath)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to resolve path %q: %w", inputPath, err)
 	}
 	if f != "" {
 		return nil, false, fmt.Errorf("path %q: %w", inputPath, ErrPathMustBeDirectory)
+	}
+
+	// Use the original inputPath (not the symlink-resolved path from CleanedAbs)
+	// for override paths, so they match what kustomize's loader will request.
+	absPath, err := filepath.Abs(inputPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get absolute path for %q: %w", inputPath, err)
 	}
 
 	var opts []union.Option
@@ -159,7 +166,7 @@ func (e *Engine) prepareFilesystem(
 				return nil, false, fmt.Errorf("failed to marshal kustomization: %w", err)
 			}
 
-			opts = append(opts, union.WithOverride(filepath.Join(p.String(), kustName), data))
+			opts = append(opts, union.WithOverride(filepath.Join(absPath, kustName), data))
 		}
 	}
 
@@ -169,7 +176,7 @@ func (e *Engine) prepareFilesystem(
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to create values ConfigMap: %w", err)
 		}
-		opts = append(opts, union.WithOverride(filepath.Join(p.String(), "values.yaml"), valuesContent))
+		opts = append(opts, union.WithOverride(filepath.Join(absPath, "values.yaml"), valuesContent))
 	}
 
 	fsys, err := union.NewFs(e.fs, opts...)
