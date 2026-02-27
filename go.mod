@@ -11,7 +11,7 @@ require (
 	github.com/spf13/afero v1.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
+	k8s.io/apimachinery v0.35.2
 	sigs.k8s.io/kustomize/api v0.21.1
 	sigs.k8s.io/kustomize/kyaml v0.21.1
 )
