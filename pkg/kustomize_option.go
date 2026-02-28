@@ -20,6 +20,12 @@ type RendererOptions struct {
 	// Transformers are post-processing transformers applied after kustomize rendering.
 	Transformers []types.Transformer
 
+	// PostRenderers are renderer-specific post-renderers applied during Process().
+	PostRenderers []types.PostRenderer
+
+	// SourceSelectors are renderer-specific source selectors evaluated before rendering each source.
+	SourceSelectors []types.SourceSelector
+
 	// Plugins are kustomize-native transformer plugins applied during kustomize build.
 	Plugins []resmap.Transformer
 
@@ -44,7 +50,6 @@ type RendererOptions struct {
 
 	// FileSystem specifies a custom filesystem to use for kustomize operations.
 	// If nil, uses the OS filesystem (filesys.MakeFsOnDisk()).
-	// This allows using embedded filesystems, in-memory filesystems, or custom implementations.
 	FileSystem filesys.FileSystem
 }
 
@@ -52,6 +57,8 @@ type RendererOptions struct {
 func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	target.Filters = opts.Filters
 	target.Transformers = opts.Transformers
+	target.PostRenderers = append(target.PostRenderers, opts.PostRenderers...)
+	target.SourceSelectors = append(target.SourceSelectors, opts.SourceSelectors...)
 	target.Plugins = opts.Plugins
 	target.LoadRestrictions = opts.LoadRestrictions
 
@@ -72,8 +79,6 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 }
 
 // WithFilter adds a renderer-specific filter to this Kustomize renderer's processing chain.
-// Renderer-specific filters are applied during Process(), before results are returned to the engine.
-// For engine-level filtering applied to all renderers, use engine.WithFilter.
 func WithFilter(f types.Filter) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Filters = append(opts.Filters, f)
@@ -81,11 +86,24 @@ func WithFilter(f types.Filter) RendererOption {
 }
 
 // WithTransformer adds a renderer-specific transformer to this Kustomize renderer's processing chain.
-// Renderer-specific transformers are applied during Process(), before results are returned to the engine.
-// For engine-level transformation applied to all renderers, use engine.WithTransformer.
 func WithTransformer(t types.Transformer) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Transformers = append(opts.Transformers, t)
+	})
+}
+
+// WithPostRenderer adds a renderer-specific post-renderer to this Kustomize renderer's processing chain.
+func WithPostRenderer(p types.PostRenderer) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.PostRenderers = append(opts.PostRenderers, p)
+	})
+}
+
+// WithSourceSelector adds a source selector to this Kustomize renderer.
+// Use source.Selector[kustomize.Source] to build type-safe selectors.
+func WithSourceSelector(s types.SourceSelector) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.SourceSelectors = append(opts.SourceSelectors, s)
 	})
 }
 
@@ -97,8 +115,6 @@ func WithPlugin(plugin resmap.Transformer) RendererOption {
 }
 
 // WithCache enables render result caching with the specified options.
-// If no options are provided, uses default TTL of 5 minutes.
-// By default, caching is NOT enabled.
 func WithCache(opts ...cache.Option) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
 		if rendererOpts.CacheOptions == nil {
@@ -112,9 +128,6 @@ func WithCache(opts ...cache.Option) RendererOption {
 }
 
 // WithSourceAnnotations enables or disables automatic addition of source tracking annotations.
-// When enabled, the renderer adds metadata annotations to track the source type and path.
-// Annotations added: manifests.k8s-manifests-lib/source.type, source.path.
-// Default: false (disabled).
 func WithSourceAnnotations(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceAnnotations = enabled
@@ -122,8 +135,6 @@ func WithSourceAnnotations(enabled bool) RendererOption {
 }
 
 // WithContentHash enables or disables automatic addition of a SHA-256 content hash annotation.
-// When enabled, each rendered resource gets an annotation with a hash of its content.
-// Default: true (enabled).
 func WithContentHash(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.ContentHash = enabled
@@ -131,11 +142,6 @@ func WithContentHash(enabled bool) RendererOption {
 }
 
 // WithLoadRestrictions sets the renderer-wide default LoadRestrictions.
-// Valid values: LoadRestrictionsRootOnly (default), LoadRestrictionsNone, LoadRestrictionsUnknown.
-// Individual Sources can override this via Source.LoadRestrictions field.
-//
-// LoadRestrictionsRootOnly: Kustomization can only reference files within its own directory tree (secure).
-// LoadRestrictionsNone: Kustomization can reference files anywhere on the filesystem (flexible but less secure).
 func WithLoadRestrictions(restrictions kustomizetypes.LoadRestrictions) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.LoadRestrictions = restrictions
@@ -143,15 +149,6 @@ func WithLoadRestrictions(restrictions kustomizetypes.LoadRestrictions) Renderer
 }
 
 // WithWarningHandler sets a custom handler for kustomize deprecation warnings.
-// The handler receives a list of warning messages and can choose to log them, fail, or ignore them.
-// Use pre-built handlers like WarningLog(w), WarningFail(), or WarningIgnore(),
-// or provide a custom function.
-//
-// Default: WarningLog(os.Stderr) if not set.
-//
-// Example:
-//
-//	kustomize.New(sources, kustomize.WithWarningHandler(kustomize.WarningFail()))
 func WithWarningHandler(handler WarningHandler) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.WarningHandler = handler
@@ -159,22 +156,6 @@ func WithWarningHandler(handler WarningHandler) RendererOption {
 }
 
 // WithFileSystem sets a custom filesystem for kustomize operations.
-// This allows using embedded filesystems (via embed.FS), in-memory filesystems for testing,
-// or any custom filesystem implementation.
-//
-// Default: Uses OS filesystem (filesys.MakeFsOnDisk()) if not set.
-//
-// Example with embedded filesystem:
-//
-//	//go:embed kustomizations/*
-//	var embeddedFS embed.FS
-//	fs, _ := fs.NewFromIOFS(embeddedFS, "kustomizations")
-//	renderer := kustomize.New(sources, kustomize.WithFileSystem(fs))
-//
-// Example with in-memory filesystem:
-//
-//	memFs := fs.NewMemoryFs()
-//	renderer := kustomize.New(sources, kustomize.WithFileSystem(memFs))
 func WithFileSystem(fs filesys.FileSystem) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.FileSystem = fs

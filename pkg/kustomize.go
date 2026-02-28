@@ -42,6 +42,10 @@ type Source struct {
 	// If LoadRestrictionsUnknown (zero value), uses the renderer-wide default.
 	// Set to LoadRestrictionsRootOnly or LoadRestrictionsNone to override.
 	LoadRestrictions kustomizetypes.LoadRestrictions
+
+	// PostRenderers are source-specific post-renderers applied to this source's output
+	// before combining with other sources.
+	PostRenderers []types.PostRenderer
 }
 
 // Renderer is a renderer that uses kustomize to render resources.
@@ -103,36 +107,49 @@ func (r *Renderer) Name() string {
 }
 
 // Process implements types.Renderer by rendering the kustomize resources and applying filters and transformers.
-func (r *Renderer) Process(ctx context.Context, renderTimeValues map[string]any) ([]unstructured.Unstructured, error) {
+func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) ([]unstructured.Unstructured, error) {
 	allObjects := make([]unstructured.Unstructured, 0)
 
 	for _, holder := range r.inputs {
-		objects, err := r.renderSingle(ctx, holder, renderTimeValues)
+		selected, err := pipeline.ApplySourceSelectors(ctx, holder.Source, r.opts.SourceSelectors)
+		if err != nil {
+			return nil, fmt.Errorf("source selector error for kustomize path %s: %w", holder.Path, err)
+		}
+
+		if !selected {
+			continue
+		}
+
+		sValues := renderTimeValues.DeepClone()
+
+		objects, err := r.renderSingle(ctx, holder, sValues)
 		if err != nil {
 			return nil, fmt.Errorf("error rendering kustomize path %s: %w", holder.Path, err)
 		}
 
-		// Apply renderer-level filters and transformers per-source for better error context
-		transformed, err := pipeline.Apply(ctx, objects, r.opts.Filters, r.opts.Transformers)
+		objects, err = pipeline.ApplyPostRenderers(ctx, objects, holder.PostRenderers)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"error applying filters/transformers to path %s: %w",
-				holder.Path,
-				err,
-			)
+			return nil, fmt.Errorf("source post-renderer error for kustomize path %s: %w", holder.Path, err)
 		}
 
-		allObjects = append(allObjects, transformed...)
+		allObjects = append(allObjects, objects...)
 	}
 
-	return allObjects, nil
+	chain := types.BuildPostRendererChain(r.opts.Filters, r.opts.Transformers, r.opts.PostRenderers)
+
+	result, err := pipeline.ApplyPostRenderers(ctx, allObjects, chain)
+	if err != nil {
+		return nil, fmt.Errorf("renderer post-renderer error: %w", err)
+	}
+
+	return result, nil
 }
 
 // renderSingle performs the rendering for a single kustomize path.
 func (r *Renderer) renderSingle(
 	ctx context.Context,
 	holder *sourceHolder,
-	renderTimeValues map[string]any,
+	renderTimeValues types.Values,
 ) ([]unstructured.Unstructured, error) {
 	// Get values dynamically (includes render-time values)
 	values, err := computeValues(ctx, holder.Source, renderTimeValues)

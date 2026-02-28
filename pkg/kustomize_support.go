@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/k8s-manifest-kit/pkg/util"
+	"github.com/k8s-manifest-kit/engine/pkg/types"
 	utilerrors "github.com/k8s-manifest-kit/pkg/util/errors"
+	"github.com/k8s-manifest-kit/pkg/util/maps"
 	goyaml "gopkg.in/yaml.v3"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -48,7 +49,7 @@ func (h *sourceHolder) Validate() error {
 	return nil
 }
 
-func computeValues(ctx context.Context, input Source, renderTimeValues map[string]any) (map[string]string, error) {
+func computeValues(ctx context.Context, input Source, renderTimeValues types.Values) (map[string]string, error) {
 	sourceValues := map[string]any{}
 
 	if input.Values != nil {
@@ -62,8 +63,7 @@ func computeValues(ctx context.Context, input Source, renderTimeValues map[strin
 		}
 	}
 
-	// Deep merge with render-time values taking precedence
-	merged := util.DeepMerge(sourceValues, renderTimeValues)
+	merged := maps.DeepMerge(sourceValues, map[string]any(renderTimeValues))
 
 	// Convert back to map[string]string
 	result := make(map[string]string, len(merged))
