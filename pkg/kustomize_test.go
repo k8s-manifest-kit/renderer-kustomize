@@ -1022,6 +1022,166 @@ func TestSourceAnnotations(t *testing.T) {
 	})
 }
 
+func TestContentHash(t *testing.T) {
+
+	t.Run("should add content hash annotation by default", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		writeFile(t, dir, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir, "configmap.yaml", basicConfigMap)
+		writeFile(t, dir, "pod.yaml", basicPod)
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{Path: dir},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			annotations := obj.GetAnnotations()
+			g.Expect(annotations).Should(HaveKey(types.AnnotationContentHash))
+			g.Expect(annotations[types.AnnotationContentHash]).Should(MatchRegexp("^sha256:[0-9a-f]{64}$"))
+		}
+	})
+
+	t.Run("should not add content hash when disabled", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		writeFile(t, dir, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir, "configmap.yaml", basicConfigMap)
+		writeFile(t, dir, "pod.yaml", basicPod)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithContentHash(false),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			annotations := obj.GetAnnotations()
+			g.Expect(annotations).ShouldNot(HaveKey(types.AnnotationContentHash))
+		}
+	})
+
+	t.Run("different objects should have different hashes", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		writeFile(t, dir, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir, "configmap.yaml", basicConfigMap)
+		writeFile(t, dir, "pod.yaml", basicPod)
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{Path: dir},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+
+		hash0 := objects[0].GetAnnotations()[types.AnnotationContentHash]
+		hash1 := objects[1].GetAnnotations()[types.AnnotationContentHash]
+		g.Expect(hash0).ShouldNot(Equal(hash1))
+	})
+
+	t.Run("hash should change when content changes", func(t *testing.T) {
+		g := NewWithT(t)
+
+		dir1 := t.TempDir()
+		writeFile(t, dir1, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir1, "configmap.yaml", basicConfigMap)
+		writeFile(t, dir1, "pod.yaml", basicPod)
+
+		r1, err := kustomize.New([]kustomize.Source{{Path: dir1}})
+		g.Expect(err).ToNot(HaveOccurred())
+		objects1, err := r1.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects1).ToNot(BeEmpty())
+
+		// Use a different ConfigMap with different data
+		const altConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap
+data:
+  key: different-value
+`
+		dir2 := t.TempDir()
+		writeFile(t, dir2, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir2, "configmap.yaml", altConfigMap)
+		writeFile(t, dir2, "pod.yaml", basicPod)
+
+		r2, err := kustomize.New([]kustomize.Source{{Path: dir2}})
+		g.Expect(err).ToNot(HaveOccurred())
+		objects2, err := r2.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects2).ToNot(BeEmpty())
+
+		// Find the ConfigMap in both results and compare hashes
+		var hash1, hash2 string
+		for _, obj := range objects1 {
+			if obj.GetKind() == "ConfigMap" {
+				hash1 = obj.GetAnnotations()[types.AnnotationContentHash]
+			}
+		}
+		for _, obj := range objects2 {
+			if obj.GetKind() == "ConfigMap" {
+				hash2 = obj.GetAnnotations()[types.AnnotationContentHash]
+			}
+		}
+
+		g.Expect(hash1).ShouldNot(BeEmpty())
+		g.Expect(hash2).ShouldNot(BeEmpty())
+		g.Expect(hash1).ShouldNot(Equal(hash2))
+	})
+
+	t.Run("cached results should preserve content hash", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := t.TempDir()
+
+		writeFile(t, dir, "kustomization.yaml", basicKustomization)
+		writeFile(t, dir, "configmap.yaml", basicConfigMap)
+		writeFile(t, dir, "pod.yaml", basicPod)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{
+				{
+					Path:   dir,
+					Values: kustomize.Values(map[string]string{"key": "value"}),
+				},
+			},
+			kustomize.WithCache(),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+
+		for i := range result1 {
+			hash1 := result1[i].GetAnnotations()[types.AnnotationContentHash]
+			hash2 := result2[i].GetAnnotations()[types.AnnotationContentHash]
+			g.Expect(hash1).ShouldNot(BeEmpty())
+			g.Expect(hash1).Should(Equal(hash2))
+		}
+	})
+}
+
 func TestLoadRestrictions(t *testing.T) {
 
 	t.Run("should use default LoadRestrictionsRootOnly", func(t *testing.T) {

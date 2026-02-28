@@ -61,6 +61,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		Transformers:     make([]types.Transformer, 0),
 		Plugins:          make([]resmap.Transformer, 0),
 		LoadRestrictions: kustomizetypes.LoadRestrictionsRootOnly,
+		ContentHash:      true,
 	}
 
 	// Apply all options to RendererOptions

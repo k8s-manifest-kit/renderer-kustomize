@@ -245,6 +245,10 @@ func (e *Engine) convertResources(
 		}
 
 		e.addSourceAnnotationsToObject(&result[i], inputPath, res)
+
+		if e.opts.ContentHash {
+			types.SetContentHash(&result[i])
+		}
 	}
 
 	return result, nil

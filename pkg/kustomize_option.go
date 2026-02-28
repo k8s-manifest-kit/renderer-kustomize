@@ -29,6 +29,10 @@ type RendererOptions struct {
 	// SourceAnnotations enables automatic addition of source tracking annotations.
 	SourceAnnotations bool
 
+	// ContentHash enables automatic addition of a SHA-256 content hash annotation.
+	// Default: true (enabled).
+	ContentHash bool
+
 	// LoadRestrictions sets renderer-wide default for load restrictions.
 	// Individual Sources can override this via Source.LoadRestrictions.
 	// Default: LoadRestrictionsRootOnly (security best practice).
@@ -59,6 +63,7 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	}
 
 	target.SourceAnnotations = opts.SourceAnnotations
+	target.ContentHash = opts.ContentHash
 	target.WarningHandler = opts.WarningHandler
 
 	if opts.FileSystem != nil {
@@ -113,6 +118,15 @@ func WithCache(opts ...cache.Option) RendererOption {
 func WithSourceAnnotations(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceAnnotations = enabled
+	})
+}
+
+// WithContentHash enables or disables automatic addition of a SHA-256 content hash annotation.
+// When enabled, each rendered resource gets an annotation with a hash of its content.
+// Default: true (enabled).
+func WithContentHash(enabled bool) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.ContentHash = enabled
 	})
 }
 
