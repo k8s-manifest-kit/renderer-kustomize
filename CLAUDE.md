@@ -114,7 +114,7 @@ Afero-based filesystem adapters (`pkg/util/fs/`):
 - Union filesystems with functional options (`pkg/util/fs/union/`)
 - Read-only wrappers and base path restrictions
 - Organized by filesystem type in subpackages
-- See `docs/fs-adapter.md` for details
+- See @docs/fs-adapter.md for details
 
 ### Pipeline Integration
 The renderer integrates with the three-level pipeline:
@@ -171,9 +171,9 @@ kustomize.Source{
 ## Questions?
 
 Check:
-1. `docs/design.md` - Architecture and design decisions
-2. `docs/fs-adapter.md` - Filesystem adapters guide
-3. `docs/development.md` - Development workflow
+1. @docs/design.md - Architecture and design decisions
+2. @docs/fs-adapter.md - Filesystem adapters guide
+3. @docs/development.md - Development workflow
 4. `pkg/*_test.go` - Usage examples
 5. Parent repository documentation at github.com/k8s-manifest-kit
 
