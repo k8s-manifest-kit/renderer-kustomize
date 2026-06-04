@@ -42,12 +42,9 @@ type Engine struct {
 // newKustomizeEngine creates a new kustomize rendering engine.
 func newKustomizeEngine(fs filesys.FileSystem, opts *RendererOptions) *Engine {
 	return &Engine{
-		kustomizer: krusty.MakeKustomizer(&krusty.Options{
-			LoadRestrictions: opts.LoadRestrictions,
-			PluginConfig:     &kustomizetypes.PluginConfig{},
-		}),
-		fs:   fs,
-		opts: opts,
+		kustomizer: krusty.MakeKustomizer(buildKrustyOptions(opts, opts.LoadRestrictions)),
+		fs:         fs,
+		opts:       opts,
 	}
 }
 
@@ -58,11 +55,7 @@ func (e *Engine) Run(input Source, values map[string]string) ([]unstructured.Uns
 		restrictions = input.LoadRestrictions
 	}
 
-	// Create kustomizer with appropriate restrictions
-	kustomizer := krusty.MakeKustomizer(&krusty.Options{
-		LoadRestrictions: restrictions,
-		PluginConfig:     &kustomizetypes.PluginConfig{},
-	})
+	kustomizer := krusty.MakeKustomizer(buildKrustyOptions(e.opts, restrictions))
 
 	kust, name, err := readKustomization(e.fs, input.Path)
 	if err != nil {

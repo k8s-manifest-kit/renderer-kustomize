@@ -1182,6 +1182,102 @@ data:
 	})
 }
 
+func TestManagedByLabel(t *testing.T) {
+
+	t.Run("should add managed-by label when enabled", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithManagedByLabel(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			g.Expect(obj.GetLabels()).To(HaveKey("app.kubernetes.io/managed-by"))
+		}
+	})
+
+	t.Run("should not add managed-by label by default", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New([]kustomize.Source{{Path: dir}})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			g.Expect(obj.GetLabels()).ToNot(HaveKey("app.kubernetes.io/managed-by"))
+		}
+	})
+}
+
+func TestPluginOptions(t *testing.T) {
+
+	t.Run("should accept FnPluginLoadingOptions", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithFnPluginLoadingOptions(kustomizetypes.FnPluginLoadingOptions{
+				EnableExec: true,
+			}),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+	})
+
+	t.Run("should accept BuiltinPluginLoadingOptions", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithBuiltinPluginLoadingOptions(kustomizetypes.BploUseStaticallyLinked),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+	})
+
+	t.Run("should compose all plugin options", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithFnPluginLoadingOptions(kustomizetypes.FnPluginLoadingOptions{
+				EnableExec: true,
+			}),
+			kustomize.WithBuiltinPluginLoadingOptions(kustomizetypes.BploUseStaticallyLinked),
+			kustomize.WithManagedByLabel(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+
+		for _, obj := range objects {
+			g.Expect(obj.GetLabels()).To(HaveKey("app.kubernetes.io/managed-by"))
+		}
+	})
+}
+
 func TestLoadRestrictions(t *testing.T) {
 
 	t.Run("should use default LoadRestrictionsRootOnly", func(t *testing.T) {

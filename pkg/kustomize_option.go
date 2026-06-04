@@ -4,6 +4,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
+	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -51,6 +52,22 @@ type RendererOptions struct {
 	// FileSystem specifies a custom filesystem to use for kustomize operations.
 	// If nil, uses the OS filesystem (filesys.MakeFsOnDisk()).
 	FileSystem filesys.FileSystem
+
+	// FnPluginLoadingOptions configures KRM function and exec plugin behavior.
+	// When set, PluginRestrictions is automatically opened to PluginRestrictionsNone
+	// since function-based plugins require it.
+	// Note: kustomize's plugin loader always reads plugin configs from the real
+	// disk, regardless of the FileSystem passed via WithFileSystem.
+	// Default: nil (function-based plugins disabled).
+	FnPluginLoadingOptions *kustomizetypes.FnPluginLoadingOptions
+
+	// BuiltinPluginLoadingOptions controls how builtin plugins are loaded.
+	// Default: BploUseStaticallyLinked.
+	BuiltinPluginLoadingOptions *kustomizetypes.BuiltinPluginLoadingOptions
+
+	// AddManagedByLabel adds app.kubernetes.io/managed-by: kustomize-<version> to all resources.
+	// Default: false.
+	AddManagedByLabel bool
 }
 
 // ApplyTo applies the renderer options to the target configuration.
@@ -76,6 +93,16 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	if opts.FileSystem != nil {
 		target.FileSystem = opts.FileSystem
 	}
+
+	if opts.FnPluginLoadingOptions != nil {
+		target.FnPluginLoadingOptions = opts.FnPluginLoadingOptions
+	}
+
+	if opts.BuiltinPluginLoadingOptions != nil {
+		target.BuiltinPluginLoadingOptions = opts.BuiltinPluginLoadingOptions
+	}
+
+	target.AddManagedByLabel = opts.AddManagedByLabel
 }
 
 // WithFilter adds a renderer-specific filter to this Kustomize renderer's processing chain.
@@ -161,4 +188,47 @@ func WithFileSystem(fs filesys.FileSystem) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.FileSystem = fs
 	})
+}
+
+// WithFnPluginLoadingOptions configures KRM function and exec plugin behavior.
+// Setting this automatically opens PluginRestrictions to PluginRestrictionsNone.
+func WithFnPluginLoadingOptions(fnOpts kustomizetypes.FnPluginLoadingOptions) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.FnPluginLoadingOptions = &fnOpts
+	})
+}
+
+// WithBuiltinPluginLoadingOptions controls how builtin plugins are loaded
+// (statically linked vs. from filesystem).
+func WithBuiltinPluginLoadingOptions(bpOpts kustomizetypes.BuiltinPluginLoadingOptions) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.BuiltinPluginLoadingOptions = &bpOpts
+	})
+}
+
+// WithManagedByLabel enables or disables adding the app.kubernetes.io/managed-by label.
+func WithManagedByLabel(enabled bool) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.AddManagedByLabel = enabled
+	})
+}
+
+// buildKrustyOptions constructs krusty.Options from RendererOptions and per-source load restrictions.
+func buildKrustyOptions(rendererOpts *RendererOptions, restrictions kustomizetypes.LoadRestrictions) *krusty.Options {
+	opts := &krusty.Options{
+		LoadRestrictions:  restrictions,
+		AddManagedbyLabel: rendererOpts.AddManagedByLabel,
+		PluginConfig:      kustomizetypes.DisabledPluginConfig(),
+	}
+
+	if rendererOpts.BuiltinPluginLoadingOptions != nil {
+		opts.PluginConfig.BpLoadingOptions = *rendererOpts.BuiltinPluginLoadingOptions
+	}
+
+	if rendererOpts.FnPluginLoadingOptions != nil {
+		opts.PluginConfig.FnpLoadingOptions = *rendererOpts.FnPluginLoadingOptions
+		opts.PluginConfig.PluginRestrictions = kustomizetypes.PluginRestrictionsNone
+	}
+
+	return opts
 }
