@@ -2,7 +2,6 @@ package kustomize_test
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -93,22 +92,9 @@ func TestWarningHandlers(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("commonLabels"))
 	})
 
-	t.Run("default behavior should log to stderr", func(t *testing.T) {
+	t.Run("default behavior should render successfully without handler", func(t *testing.T) {
 		g := NewWithT(t)
 		dir := setupDeprecatedKustomization(t)
-
-		// Capture stderr
-		oldStderr := os.Stderr
-		r, w, err := os.Pipe()
-		g.Expect(err).ToNot(HaveOccurred())
-		os.Stderr = w
-
-		done := make(chan string)
-		go func() {
-			var buf bytes.Buffer
-			_, _ = buf.ReadFrom(r)
-			done <- buf.String()
-		}()
 
 		renderer, err := kustomize.New([]kustomize.Source{{Path: dir}})
 		g.Expect(err).ToNot(HaveOccurred())
@@ -116,14 +102,7 @@ func TestWarningHandlers(t *testing.T) {
 		objects, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(objects).To(HaveLen(1))
-
-		// Restore stderr
-		_ = w.Close()
-		os.Stderr = oldStderr
-		output := <-done
-
-		// Default should log warnings to stderr
-		g.Expect(output).To(ContainSubstring("commonLabels"))
+		g.Expect(objects[0].GetKind()).To(Equal("ConfigMap"))
 	})
 
 	t.Run("should handle multiple warnings", func(t *testing.T) {

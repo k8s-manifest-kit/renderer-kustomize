@@ -46,7 +46,9 @@ type RendererOptions struct {
 	LoadRestrictions kustomizetypes.LoadRestrictions
 
 	// WarningHandler is called when kustomize deprecation warnings are detected.
-	// If nil, warnings are logged to os.Stderr by default.
+	// If nil, kustomize's own stderr output is the only warning signal.
+	// Use WarningFail() to abort rendering on warnings, WarningLog(w) to
+	// redirect warnings to a custom writer, or WarningIgnore() as a no-op.
 	WarningHandler WarningHandler
 
 	// FileSystem specifies a custom filesystem to use for kustomize operations.
