@@ -85,7 +85,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 			Source: inputs[i],
 		}
 		if err := holders[i].Validate(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validation failed for source[%d] (path: %q): %w", i, inputs[i].Path, err)
 		}
 	}
 
