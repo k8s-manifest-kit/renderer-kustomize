@@ -596,6 +596,7 @@ func TestCacheIntegration(t *testing.T) {
 			},
 		},
 			kustomize.WithCache(),
+			kustomize.WithSourceAnnotations(true),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 
@@ -603,15 +604,23 @@ func TestCacheIntegration(t *testing.T) {
 		result1, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).ToNot(BeEmpty())
+		for _, obj := range result1 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginLive,
+			))
+		}
 
-		// Second render - cache hit (should be identical)
+		// Second render - cache hit
 		result2, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result2).To(HaveLen(len(result1)))
 
-		// Results should be equal
-		for i := range result1 {
-			g.Expect(result2[i]).To(Equal(result1[i]))
+		for _, obj := range result2 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginCache,
+			))
 		}
 	})
 
@@ -852,6 +861,10 @@ func TestSourceAnnotations(t *testing.T) {
 		for _, obj := range objects {
 			annotations := obj.GetAnnotations()
 			g.Expect(annotations).Should(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+			g.Expect(annotations).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginLive,
+			))
 			g.Expect(annotations).Should(HaveKeyWithValue(types.AnnotationSourcePath, dir))
 			// Kustomize renderer should have file annotation with relative path
 			g.Expect(annotations).Should(HaveKey(types.AnnotationSourceFile))

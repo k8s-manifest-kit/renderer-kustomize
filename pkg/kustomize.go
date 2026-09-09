@@ -177,6 +177,8 @@ func (r *Renderer) renderSingle(
 		r.cache.Sync()
 
 		if cached, found := r.cache.Get(spec); found {
+			r.addRenderOrigin(cached, types.RenderOriginCache)
+
 			return cached, nil
 		}
 	}
@@ -191,6 +193,21 @@ func (r *Renderer) renderSingle(
 	if r.cache != nil {
 		r.cache.Set(spec, result)
 	}
+	r.addRenderOrigin(result, types.RenderOriginLive)
 
 	return result, nil
+}
+
+// addRenderOrigin adds the render-origin annotation when source annotations are enabled.
+func (r *Renderer) addRenderOrigin(
+	objects []unstructured.Unstructured,
+	origin string,
+) {
+	if !r.opts.SourceAnnotations {
+		return
+	}
+
+	for i := range objects {
+		types.SetRenderOrigin(&objects[i], origin)
+	}
 }
