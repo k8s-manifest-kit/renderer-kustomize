@@ -9,6 +9,7 @@ linters:
     - wsl_v5
     - varnamelen
     - exhaustruct
+    - exhaustruct_v5
     - funlen
     - ireturn
     - depguard
