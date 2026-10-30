@@ -6,6 +6,7 @@ Use Go 1.26.8. Run the repository Makefile targets:
 
 ```bash
 make test
+make test/race
 make fmt
 make lint
 make lint/fix
@@ -25,6 +26,11 @@ and the Kustomization configuration that consumes it. When changing load
 restrictions, test renderer defaults and per-source overrides. Filesystem
 tests should cover missing files, overlays, read-only behavior, and path
 normalization.
+
+`make test/race` re-runs the unit suite under the race detector. The
+concurrency tests render overlapping requests with distinct scalar values
+against a single shared renderer, so run it whenever changing the virtual
+values overlay, cache handling, source isolation, or output cloning.
 
 See [`design.md`](design.md), [`fs-adapter.md`](fs-adapter.md), and
 [`../AGENTS.md`](../AGENTS.md).
