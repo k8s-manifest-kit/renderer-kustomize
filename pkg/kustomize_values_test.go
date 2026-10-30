@@ -1,6 +1,7 @@
 package kustomize_test
 
 import (
+	"context"
 	"errors"
 	"math"
 	"path/filepath"
@@ -226,6 +227,27 @@ func TestRenderTimeValueValidation(t *testing.T) {
 				g.Expect(errors.Is(err, kustomize.ErrUnsupportedValue)).To(BeTrue())
 			})
 		}
+	})
+
+	t.Run("should not reject values for sources removed by selectors", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{{Path: dir}},
+			kustomize.WithSourceSelector(func(_ context.Context, _ kustomize.Source) (bool, error) {
+				return false, nil
+			}),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// Structured values are invalid for Kustomize sources, but the only
+		// registered source is deselected, so it must be skipped without
+		// constraining the render-time values (for example values aimed at
+		// another renderer in the same engine pipeline).
+		objects, err := renderer.Process(t.Context(), types.Values{"offending": map[string]any{"a": "1"}})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(BeEmpty())
 	})
 
 	t.Run("should reject non-finite floats", func(t *testing.T) {

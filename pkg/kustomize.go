@@ -116,19 +116,12 @@ func (r *Renderer) Name() string {
 // float). They are merged over the source's values and exposed through the
 // virtual values.yaml ConfigMap. Any other value type returns an error
 // wrapping ErrUnsupportedValue that names the offending key, before any
-// rendering or cache lookup.
+// rendering or cache lookup. Validation applies per selected source:
+// sources removed by source selectors do not constrain render-time values.
 func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) ([]unstructured.Unstructured, error) {
 	allObjects := make([]unstructured.Unstructured, 0)
 
 	for _, holder := range r.inputs {
-		// Validate values before any recursive copying below: the clone
-		// helpers used for render-time values and for merging have no cycle
-		// detection, so unsupported values must be rejected here, by type,
-		// instead of being traversed.
-		if err := validateValues(renderTimeValues); err != nil {
-			return nil, fmt.Errorf("invalid values for kustomize path %s: %w", holder.Path, err)
-		}
-
 		selected, err := pipeline.ApplySourceSelectors(ctx, holder.Source, r.opts.SourceSelectors)
 		if err != nil {
 			return nil, fmt.Errorf("source selector error for kustomize path %s: %w", holder.Path, err)
@@ -136,6 +129,16 @@ func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) (
 
 		if !selected {
 			continue
+		}
+
+		// Validate values before any recursive copying below: the clone
+		// helpers used for render-time values and for merging have no cycle
+		// detection, so unsupported values must be rejected here, by type,
+		// instead of being traversed. Validation runs after source selection
+		// so that deselected sources never reject values that are valid for
+		// the sources actually being rendered.
+		if err := validateValues(renderTimeValues); err != nil {
+			return nil, fmt.Errorf("invalid values for kustomize path %s: %w", holder.Path, err)
 		}
 
 		sValues := renderTimeValues.DeepClone()
