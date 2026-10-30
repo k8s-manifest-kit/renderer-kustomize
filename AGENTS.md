@@ -21,6 +21,8 @@ The package is imported from `github.com/k8s-manifest-kit/renderer-kustomize/pkg
 
 Values are exposed through a virtual `values.yaml` overlay and are not applied automatically. The Kustomization must explicitly consume them through its own generators, replacements, or patches. Source annotations use the shared source type, path, and file constants.
 
+Render-time values passed to `Process` — including through `engine.Render` with `render.WithValues` — must be scalars: strings, booleans, or real integer, unsigned, or finite floating-point numbers. Merged values are exposed as string data in the virtual `values.yaml` ConfigMap using the default `fmt` representation. Null, maps, slices, pointers, structs, functions, complex numbers, non-finite floats, and any other type are rejected before rendering or cache lookup with an error wrapping `ErrUnsupportedValue` that names the offending key and its type without including the value.
+
 The default load restriction is `LoadRestrictionsRootOnly`. Function plugins require explicit plugin-loading options and open Kustomize plugin restrictions as documented by the option comments.
 
 ## Filesystems
