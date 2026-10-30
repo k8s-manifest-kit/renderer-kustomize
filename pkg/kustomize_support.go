@@ -8,11 +8,14 @@ import (
 	"strings"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 	utilerrors "github.com/k8s-manifest-kit/pkg/util/errors"
 	"github.com/k8s-manifest-kit/pkg/util/maps"
 	goyaml "gopkg.in/yaml.v3"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Values returns a Values function that always returns the provided static values.
@@ -38,6 +41,13 @@ var (
 // sourceHolder wraps a Source with internal state for consistency with other renderers.
 type sourceHolder struct {
 	Source
+
+	// cache isolates this source's rendered results from every other
+	// registered source, so a source's load restrictions and post-rendering
+	// pipeline can never be bypassed through another source's cached output,
+	// regardless of the configured key function. It is nil when caching is
+	// disabled.
+	cache cache.Interface[[]unstructured.Unstructured]
 }
 
 // Validate checks if the Source configuration is valid.

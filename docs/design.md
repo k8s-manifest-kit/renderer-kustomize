@@ -27,6 +27,22 @@ transformers, and post-renderers. Source annotations are opt-in. Content hash
 annotations use `manifests.k8s-manifests-kit/content.hash` and are enabled by
 default.
 
+## Output cache
+
+Render-result caching is opt-in via `WithCache`. Every registered source
+receives its own cache instance configured with the renderer-wide TTL and
+key function. Because caches are isolated per source, a source's effective
+load restrictions and post-rendering pipeline can never be bypassed through
+another source's cached output — including sources that share a path and
+values, or a cache configured with a constant custom key. Custom key
+functions still receive the public `KustomizationSpec` (path and values), and
+within a single source a custom key keeps controlling hit behavior.
+
+Cache entries are deep-cloned when stored and when retrieved, so mutating a
+rendered result never pollutes later renders. On a miss (or after the
+configured TTL, five minutes by default, expires an entry) the source is
+rebuilt through the normal Kustomize build, picking up filesystem changes.
+
 ## Filesystem support
 
 The public filesystem helpers are in `pkg/util/fs`: `NewFsOnDisk`,

@@ -6,7 +6,6 @@ import (
 
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -59,7 +58,6 @@ type Renderer struct {
 	fs     filesys.FileSystem
 	engine *Engine
 	opts   *RendererOptions
-	cache  cache.Interface[[]unstructured.Unstructured]
 }
 
 // New creates a new kustomize renderer.
@@ -78,11 +76,13 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		opt.ApplyTo(&rendererOpts)
 	}
 
-	// Wrap sources in holders and validate
+	// Wrap sources in holders and validate. Each holder gets its own output
+	// cache so no source can reuse another source's rendered results.
 	holders := make([]*sourceHolder, len(inputs))
 	for i := range inputs {
 		holders[i] = &sourceHolder{
 			Source: inputs[i],
+			cache:  newCache(rendererOpts.CacheOptions),
 		}
 		if err := holders[i].Validate(); err != nil {
 			return nil, fmt.Errorf("validation failed for source[%d] (path: %q): %w", i, inputs[i].Path, err)
@@ -100,7 +100,6 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		fs:     fsys,
 		engine: newKustomizeEngine(fsys, &rendererOpts),
 		opts:   &rendererOpts,
-		cache:  newCache(rendererOpts.CacheOptions),
 	}
 
 	return r, nil
@@ -172,11 +171,11 @@ func (r *Renderer) renderSingle(
 	}
 
 	// Check cache (if enabled)
-	if r.cache != nil {
+	if holder.cache != nil {
 		// ensure objects are evicted
-		r.cache.Sync()
+		holder.cache.Sync()
 
-		if cached, found := r.cache.Get(spec); found {
+		if cached, found := holder.cache.Get(spec); found {
 			r.addRenderOrigin(cached, types.RenderOriginCache)
 
 			return cached, nil
@@ -190,8 +189,8 @@ func (r *Renderer) renderSingle(
 	}
 
 	// Cache result (if enabled)
-	if r.cache != nil {
-		r.cache.Set(spec, result)
+	if holder.cache != nil {
+		holder.cache.Set(spec, result)
 	}
 	r.addRenderOrigin(result, types.RenderOriginLive)
 
