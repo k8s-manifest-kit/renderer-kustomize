@@ -27,6 +27,11 @@ offline.
 - `pkg/util/fs/` — filesystem constructors and adapters.
 - `pkg/util/fs/union/` — overlay filesystem implementation.
 
+Renderer options are typed by the shared
+`github.com/k8s-manifest-kit/pkg/util/option` package. The layout follows the
+shared [`project-layout.md`](../../docs/project-layout.md) convention
+(workspace navigation).
+
 ## Code conventions
 
 - Give each parameter its own explicit type: `name string, namespace string`.
