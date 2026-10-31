@@ -60,7 +60,9 @@ key function. Because caches are isolated per source, a source's effective
 load restrictions and post-rendering pipeline can never be bypassed through
 another source's cached output — including sources that share a path and
 values, or a cache configured with a constant custom key. Custom key
-functions still receive the public `KustomizationSpec` (path and values), and
+functions still receive the public `cache.KustomizationSpec` (path and
+values) from `github.com/k8s-manifest-kit/renderer-kustomize/pkg/cache`
+(constructed with `cache.New`), and
 within a single source a custom key keeps controlling hit behavior.
 
 Cache entries are deep-cloned when stored and when retrieved, so mutating a

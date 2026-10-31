@@ -4,10 +4,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/k8s-manifest-kit/pkg/util/cache"
+	utilcache "github.com/k8s-manifest-kit/pkg/util/cache"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
 
 	kustomize "github.com/k8s-manifest-kit/renderer-kustomize/pkg"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/cache"
 
 	. "github.com/onsi/gomega"
 )
@@ -190,6 +191,10 @@ func TestLoadRestrictions(t *testing.T) {
 		g := NewWithT(t)
 		dir := setupBasicKustomization(t)
 
+		// Capture every callback input so the moved spec shape and the
+		// effective values are proven, not just inferred from equal output.
+		var captured []any
+
 		// Use FastCacheKey which ignores values
 		renderer, err := kustomize.New([]kustomize.Source{
 			{
@@ -200,12 +205,14 @@ func TestLoadRestrictions(t *testing.T) {
 			},
 		},
 			kustomize.WithCache(
-				cache.WithKeyFunc(func(key any) string {
-					if spec, ok := key.(kustomize.KustomizationSpec); ok {
+				utilcache.WithKeyFunc(func(key any) string {
+					captured = append(captured, key)
+
+					if spec, ok := key.(cache.KustomizationSpec); ok {
 						return spec.Path
 					}
 
-					return cache.DefaultKeyFunc(key)
+					return utilcache.DefaultKeyFunc(key)
 				}),
 			),
 		)
@@ -216,6 +223,17 @@ func TestLoadRestrictions(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).To(HaveLen(2))
 
+		// The key function was invoked with the moved KustomizationSpec type,
+		// the fixture path, and the effective source values.
+		firstRenderCallbacks := len(captured)
+		g.Expect(firstRenderCallbacks).ToNot(BeZero(), "the key function should be invoked during the first render")
+		for _, key := range captured {
+			spec, ok := key.(cache.KustomizationSpec)
+			g.Expect(ok).To(BeTrue(), "key function should receive a KustomizationSpec, got %T", key)
+			g.Expect(spec.Path).To(Equal(dir))
+			g.Expect(spec.Values).To(HaveKeyWithValue("key1", "value1"))
+		}
+
 		// Second render with DIFFERENT values but using FastCacheKey
 		// ignores values, so this should be a cache hit
 		result2, err := renderer.Process(t.Context(), map[string]any{
@@ -223,6 +241,16 @@ func TestLoadRestrictions(t *testing.T) {
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result2).To(HaveLen(len(result1)))
+
+		// The second render's callbacks carry the render-time overlay value.
+		secondRenderCallbacks := captured[firstRenderCallbacks:]
+		g.Expect(secondRenderCallbacks).ToNot(BeEmpty(), "the key function should be invoked during the second render")
+		for _, key := range secondRenderCallbacks {
+			spec, ok := key.(cache.KustomizationSpec)
+			g.Expect(ok).To(BeTrue(), "key function should receive a KustomizationSpec, got %T", key)
+			g.Expect(spec.Path).To(Equal(dir))
+			g.Expect(spec.Values).To(HaveKeyWithValue("key1", "different-value"))
+		}
 
 		// Results should be identical despite different values (cache hit)
 		for i := range result1 {

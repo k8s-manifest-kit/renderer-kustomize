@@ -26,6 +26,8 @@ offline.
 - `pkg/kustomize_option.go` — renderer options and defaults.
 - `pkg/fs/` — filesystem constructors and adapters.
 - `pkg/fs/union/` — overlay filesystem implementation.
+- `pkg/cache/` — `cache.New` and `cache.KustomizationSpec` for output-cache
+  construction and cache keys.
 
 Renderer options are typed by the shared
 `github.com/k8s-manifest-kit/pkg/util/option` package. The layout follows the

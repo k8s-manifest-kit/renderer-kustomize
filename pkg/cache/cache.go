@@ -1,7 +1,7 @@
-package kustomize
+package cache
 
 import (
-	"github.com/k8s-manifest-kit/pkg/util/cache"
+	utilcache "github.com/k8s-manifest-kit/pkg/util/cache"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -12,8 +12,8 @@ type KustomizationSpec struct {
 	Values map[string]string
 }
 
-// newCache creates a cache instance with Kustomize-specific default KeyFunc.
-func newCache(opts *cache.Options) cache.Interface[[]unstructured.Unstructured] {
+// New creates a cache instance with Kustomize-specific default KeyFunc.
+func New(opts *utilcache.Options) utilcache.Interface[[]unstructured.Unstructured] {
 	if opts == nil {
 		return nil
 	}
@@ -22,8 +22,8 @@ func newCache(opts *cache.Options) cache.Interface[[]unstructured.Unstructured] 
 
 	// Inject default KeyFunc for Kustomize
 	if co.KeyFunc == nil {
-		co.KeyFunc = cache.DefaultKeyFunc
+		co.KeyFunc = utilcache.DefaultKeyFunc
 	}
 
-	return cache.NewRenderCache(co)
+	return utilcache.NewRenderCache(co)
 }

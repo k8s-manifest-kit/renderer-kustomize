@@ -12,6 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/cache"
 	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
 )
 
@@ -82,7 +83,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	for i := range inputs {
 		holders[i] = &sourceHolder{
 			Source: inputs[i],
-			cache:  newCache(rendererOpts.CacheOptions),
+			cache:  cache.New(rendererOpts.CacheOptions),
 		}
 		if err := holders[i].Validate(); err != nil {
 			return nil, fmt.Errorf("validation failed for source[%d] (path: %q): %w", i, inputs[i].Path, err)
@@ -182,7 +183,7 @@ func (r *Renderer) renderSingle(
 		)
 	}
 
-	spec := KustomizationSpec{
+	spec := cache.KustomizationSpec{
 		Path:   holder.Path,
 		Values: values,
 	}
