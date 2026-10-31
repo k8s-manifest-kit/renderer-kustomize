@@ -11,54 +11,16 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	kustomize "github.com/k8s-manifest-kit/renderer-kustomize/pkg"
 
 	. "github.com/onsi/gomega"
 )
-
-// valuesKustomization consumes the virtual values.yaml ConfigMap as a
-// resource, so rendered values are observable in the output objects.
-const valuesKustomization = `
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-- configmap.yaml
-- values.yaml
-`
 
 // secretStringer implements fmt.Stringer to prove that Stringer objects are
 // rejected as values rather than formatted through their String method.
 type secretStringer struct{}
 
 func (secretStringer) String() string { return "secret-stringer-output" }
-
-// setupValuesKustomization creates a kustomization that renders the virtual
-// values ConfigMap alongside a plain ConfigMap.
-func setupValuesKustomization(t *testing.T) string {
-	t.Helper()
-
-	dir := t.TempDir()
-
-	writeFile(t, dir, "kustomization.yaml", valuesKustomization)
-	writeFile(t, dir, "configmap.yaml", basicConfigMap)
-
-	return dir
-}
-
-// findValuesConfigMap returns the rendered virtual values ConfigMap, or nil
-// when the render did not produce one.
-func findValuesConfigMap(objects []unstructured.Unstructured) *unstructured.Unstructured {
-	for i := range objects {
-		if objects[i].GetKind() == "ConfigMap" && objects[i].GetName() == "values" {
-			return &objects[i]
-		}
-	}
-
-	return nil
-}
 
 func TestRenderTimeScalarValues(t *testing.T) {
 
@@ -417,5 +379,50 @@ func TestEngineRenderValues(t *testing.T) {
 			"replicas": "3",
 			"enabled":  "true",
 		}))
+	})
+}
+
+func TestValuesConfigMap(t *testing.T) {
+
+	t.Run("should write values as ConfigMap", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		values := map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		}
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{
+				Path:   dir,
+				Values: kustomize.Values(values),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// Render should create values.yaml
+		_, err = renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// With virtual filesystem, values.yaml never touches disk
+	})
+
+	t.Run("should work without values", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{Path: dir},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(2))
+
+		// No values.yaml should be created
+		valuesPath := filepath.Join(dir, "values.yaml")
+		g.Expect(valuesPath).ToNot(BeAnExistingFile())
 	})
 }

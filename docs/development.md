@@ -30,9 +30,8 @@ offline.
 ## Code conventions
 
 - Give each parameter its own explicit type: `name string, namespace string`.
-- Keep shared implementation helpers in `*_support.go` and test-only support
-  in `*_support_test.go`; keep cohesive feature files intact rather than
-  extracting every small helper.
+- Keep shared implementation helpers in `*_support.go`; test file layout
+  follows the [Test layout](#test-layout) rules below.
 - Wrap errors with operation and source context using `%w`, and check
   sentinel errors with `errors.Is`. Validation errors name the path, key, and
   type needed for diagnosis without including the rejected value's contents.
@@ -77,6 +76,29 @@ kind: ConfigMap
   target changed before checking other results or later renders: cached
   results are deep-cloned when stored and retrieved, so mutating one render
   must never affect another.
+
+### Test layout
+
+- Colocate tests with implementation: a `test/` subdirectory is a separate
+  Go package, not a cosmetic folder, so use existing package boundaries.
+- Keep a cohesive `<component>_test.go` for core API behavior and organize
+  larger suites by concern as `<component>_<concern>_test.go` — for example
+  `kustomize_cache_test.go`, `kustomize_values_test.go`,
+  `kustomize_concurrency_test.go`, or `kustomize_metadata_test.go`. These
+  names fit packages that need them; they are not mandatory files.
+- Place benchmarks in `<component>_benchmark_test.go` in the same package
+  directory, keeping benchmark names and setup/timing behavior intact.
+- Put helpers and fixtures shared across a package's tests in
+  `<component>_support_test.go`, and substantial feature-specific fixture
+  machinery in `<component>_<concern>_support_test.go`. Small test-local
+  helpers and scenario assertions remain beside their tests.
+- Support files contain helper, fixture, and type declarations only — no
+  test, benchmark, fuzz, or example entry points. `_support_test.go` is a
+  naming convention; only `_test.go` has Go's test-file significance.
+- Keep tests discoverable without excessive fragmentation: no hard line
+  limit, no one-file-per-test rule, no shared cross-repository harness, and
+  no fixture-storage migration. There is no live integration target, and
+  filenames alone never exclude a test from the default offline suite.
 
 ## Concurrency, caching, and filesystems
 

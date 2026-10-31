@@ -7,18 +7,13 @@ import (
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
+	"github.com/rs/xid"
 	kustomizetypes "sigs.k8s.io/kustomize/api/types"
-
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	kustomize "github.com/k8s-manifest-kit/renderer-kustomize/pkg"
 
 	. "github.com/onsi/gomega"
 )
-
-// cacheIsolationLabel is the label used to identify which registered source
-// produced an object when several sources render the same path.
-const cacheIsolationLabel = "cache-isolation.k8s-manifest-kit/source"
 
 // setupOutsideRootKustomization creates a kustomization in a child directory
 // that references a file in its parent directory, so it only builds under
@@ -33,31 +28,6 @@ func setupOutsideRootKustomization(t *testing.T) string {
 	writeFile(t, childDir, "kustomization.yaml", kustomizationWithParent)
 
 	return childDir
-}
-
-// labelPostRenderer returns a source post-renderer that marks every object
-// with a fixed label value, making the source's outputs identifiable in
-// combined results.
-func labelPostRenderer(value string) types.PostRenderer {
-	return func(_ context.Context, objects []unstructured.Unstructured) ([]unstructured.Unstructured, error) {
-		for i := range objects {
-			labels := objects[i].GetLabels()
-			if labels == nil {
-				labels = make(map[string]string)
-			}
-
-			labels[cacheIsolationLabel] = value
-			objects[i].SetLabels(labels)
-		}
-
-		return objects, nil
-	}
-}
-
-// constantKeyFunc always returns the same cache key, representing the most
-// permissive possible custom key configuration.
-func constantKeyFunc(_ any) string {
-	return "constant-key"
 }
 
 func TestCacheSourceIsolation(t *testing.T) {
@@ -204,5 +174,149 @@ func TestCacheSourceIsolation(t *testing.T) {
 		}
 
 		g.Expect(sources).To(Equal(map[string]int{"alpha": 2, "beta": 2}))
+	})
+}
+
+func TestCacheIntegration(t *testing.T) {
+
+	t.Run("should cache identical renders", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{
+				Path: dir,
+				Values: kustomize.Values(map[string]string{
+					"key": "value",
+				}),
+			},
+		},
+			kustomize.WithCache(),
+			kustomize.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render - cache miss
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+		for _, obj := range result1 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginLive,
+			))
+		}
+
+		// Second render - cache hit
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+
+		for _, obj := range result2 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginCache,
+			))
+		}
+	})
+
+	t.Run("should miss cache on different values", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		callCount := 0
+		dynamicValues := func(_ context.Context) (map[string]string, error) {
+			callCount++
+
+			return map[string]string{
+				"key": xid.New().String(),
+			}, nil
+		}
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{
+				Path:   dir,
+				Values: dynamicValues,
+			},
+		},
+			kustomize.WithCache(),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+
+		// Second render with different values - cache miss
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).ToNot(BeEmpty())
+
+		// Values function should be called twice (no cache hits)
+		g.Expect(callCount).To(Equal(2))
+	})
+
+	t.Run("should work with cache disabled", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New(
+			[]kustomize.Source{
+				{
+					Path: dir,
+					Values: kustomize.Values(map[string]string{
+						"key": "value",
+					}),
+				},
+			},
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+
+		// Second render - should work even without cache
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+	})
+
+	t.Run("should return clones from cache", func(t *testing.T) {
+		g := NewWithT(t)
+		dir := setupBasicKustomization(t)
+
+		renderer, err := kustomize.New([]kustomize.Source{
+			{
+				Path: dir,
+				Values: kustomize.Values(map[string]string{
+					"key": "value",
+				}),
+			},
+		},
+			kustomize.WithCache(),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+
+		// Modify first result
+		if len(result1) > 0 {
+			result1[0].SetName("modified-name")
+		}
+
+		// Second render - should not be affected by modification
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).ToNot(BeEmpty())
+
+		if len(result2) > 0 {
+			g.Expect(result2[0].GetName()).ToNot(Equal("modified-name"))
+		}
 	})
 }
