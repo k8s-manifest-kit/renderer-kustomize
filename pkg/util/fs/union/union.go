@@ -105,13 +105,13 @@ func NewFs(base filesys.FileSystem, opts ...Option) (filesys.FileSystem, error) 
 
 	baseUnwrapper, ok := base.(interface{ Unwrap() afero.Fs })
 	if !ok {
-		return nil, errors.New("base filesystem must be created with fs package functions") //nolint:err113
+		return nil, errors.New("base filesystem must be created with fs package functions") //nolint:err113 // no cause
 	}
 	baseFs := baseUnwrapper.Unwrap()
 
 	overlayUnwrapper, ok := overlay.(interface{ Unwrap() afero.Fs })
 	if !ok {
-		return nil, errors.New("overlay filesystem must be created with fs package functions") //nolint:err113
+		return nil, errors.New("overlay filesystem must be created with fs package functions") //nolint:err113 // no cause
 	}
 	overlayFs := overlayUnwrapper.Unwrap()
 

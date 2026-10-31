@@ -30,7 +30,7 @@ func Values(values map[string]string) func(context.Context) (map[string]string, 
 }
 
 var (
-	//nolint:gochecknoglobals
+	//nolint:gochecknoglobals // candidate kustomization filenames are static shared data
 	kustomizationFiles = []string{
 		"kustomization.yaml",
 		"kustomization.yml",

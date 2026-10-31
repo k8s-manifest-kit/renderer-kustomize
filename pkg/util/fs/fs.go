@@ -70,7 +70,7 @@ func NewBasePathFs(base filesys.FileSystem, basePath string) (filesys.FileSystem
 		return adapter.New(afero.NewBasePathFs(unwrapper.Unwrap(), basePath)), nil
 	}
 
-	return nil, errors.New("base filesystem must be created with fs package functions") //nolint:err113
+	return nil, errors.New("base filesystem must be created with fs package functions") //nolint:err113 // no cause to wrap
 }
 
 // readOnlyWrapper provides a simple read-only wrapper for non-Afero filesystems.
@@ -79,27 +79,27 @@ type readOnlyWrapper struct {
 }
 
 func (r *readOnlyWrapper) Create(_ string) (filesys.File, error) {
-	return nil, errors.New("create not supported on read-only filesystem") //nolint:err113
+	return nil, errors.New("create not supported on read-only filesystem") //nolint:err113 // fixed read-only message
 }
 
 func (r *readOnlyWrapper) Mkdir(_ string) error {
-	return errors.New("mkdir not supported on read-only filesystem") //nolint:err113
+	return errors.New("mkdir not supported on read-only filesystem") //nolint:err113 // fixed read-only message
 }
 
 func (r *readOnlyWrapper) MkdirAll(_ string) error {
-	return errors.New("mkdirall not supported on read-only filesystem") //nolint:err113
+	return errors.New("mkdirall not supported on read-only filesystem") //nolint:err113 // fixed read-only message
 }
 
 func (r *readOnlyWrapper) RemoveAll(_ string) error {
-	return errors.New("removeall not supported on read-only filesystem") //nolint:err113
+	return errors.New("removeall not supported on read-only filesystem") //nolint:err113 // fixed read-only message
 }
 
 func (r *readOnlyWrapper) WriteFile(_ string, _ []byte) error {
-	return errors.New("writefile not supported on read-only filesystem") //nolint:err113
+	return errors.New("writefile not supported on read-only filesystem") //nolint:err113 // fixed read-only message
 }
 
 func (r *readOnlyWrapper) Open(path string) (filesys.File, error) {
-	return r.base.Open(path) //nolint:wrapcheck
+	return r.base.Open(path) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 func (r *readOnlyWrapper) Exists(path string) bool {
@@ -111,23 +111,23 @@ func (r *readOnlyWrapper) IsDir(path string) bool {
 }
 
 func (r *readOnlyWrapper) ReadDir(path string) ([]string, error) {
-	return r.base.ReadDir(path) //nolint:wrapcheck
+	return r.base.ReadDir(path) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 func (r *readOnlyWrapper) ReadFile(path string) ([]byte, error) {
-	return r.base.ReadFile(path) //nolint:wrapcheck
+	return r.base.ReadFile(path) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 func (r *readOnlyWrapper) Glob(pattern string) ([]string, error) {
-	return r.base.Glob(pattern) //nolint:wrapcheck
+	return r.base.Glob(pattern) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 func (r *readOnlyWrapper) Walk(path string, walkFn filepath.WalkFunc) error {
-	return r.base.Walk(path, walkFn) //nolint:wrapcheck
+	return r.base.Walk(path, walkFn) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 func (r *readOnlyWrapper) CleanedAbs(path string) (filesys.ConfirmedDir, string, error) {
-	return r.base.CleanedAbs(path) //nolint:wrapcheck
+	return r.base.CleanedAbs(path) //nolint:wrapcheck // read-only wrapper forwards the base filesystem result unchanged
 }
 
 var _ filesys.FileSystem = (*readOnlyWrapper)(nil)

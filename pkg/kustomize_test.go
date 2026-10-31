@@ -158,7 +158,7 @@ data:
   location: nested
 `
 
-//nolint:gosec
+//nolint:gosec // synthetic test Secret fixture, not a real credential
 const nestedSecret = `
 apiVersion: v1
 kind: Secret

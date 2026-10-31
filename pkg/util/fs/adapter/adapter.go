@@ -1,4 +1,4 @@
-//nolint:wrapcheck,mnd
+//nolint:wrapcheck,mnd // forwards wrapped fs errors unchanged; 0777 mkdir bits match kyaml semantics
 package adapter
 
 import (
