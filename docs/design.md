@@ -13,24 +13,36 @@ renderer-wide setting.
 
 ## Virtual values
 
-Resolved values are written as a virtual `Path/values.yaml` file in the
-filesystem presented to Kustomize. Values are not automatically merged into
-resources. A Kustomization must explicitly consume the file using a
-replacement, generator, or patch. Render-time values are merged over source
-values before the virtual file is created.
+Resolved values are exposed as a virtual `Path/values.yaml` file in the
+filesystem presented to Kustomize. The file is supplied through an in-memory
+union overlay created for that render: the renderer never writes to the
+underlying filesystem, and the base filesystem is treated as immutable input.
+Values are not automatically merged into resources. A Kustomization must
+explicitly consume the file using a replacement, generator, or patch.
+Render-time values are merged over source values before the virtual file is
+created, with render-time keys taking precedence.
 
 Merged values must be scalars: strings, booleans, and real integer, unsigned,
-and finite floating-point numbers. Accepted scalars keep the default `fmt`
-representation and are exposed as string data. Null, composites (maps and
-slices), pointers, structs, functions, complex numbers, non-finite floats
-(NaN and infinities), and any other type cannot be represented and are
-rejected at the renderer boundary — before render-time values are cloned or
-merged, because the shared clone helpers do not detect cycles — with an
-error wrapping `ErrUnsupportedValue` that names the offending key and its
-type. Rejected values never reach a build or the output cache, so a warm
-cache (including one configured with a constant custom key) cannot suppress
-the error. Values implementing `fmt.Stringer` are not treated as numbers or
-strings.
+and finite floating-point numbers. Only the built-in types are accepted —
+aliases of them included, distinct named types not — so values implementing
+`fmt.Stringer` are not treated as numbers or strings. Accepted scalars keep
+the default `fmt` representation and are exposed as string data. Null,
+composites (maps and slices), pointers, structs, functions, complex numbers,
+non-finite floats (NaN and infinities), and any other type cannot be
+represented and are rejected at the renderer boundary — before render-time
+values are cloned or merged, because the shared clone helpers do not detect
+cycles — with an error wrapping `ErrUnsupportedValue` that names the
+offending key and its type without including the value. Validation inspects
+types only and never recurses into rejected composites, so cyclic values are
+rejected by type name instead of being traversed.
+
+Validation runs per selected source, after source selection and before the
+render-time clone, cache lookup, and build. Sources removed by a source
+selector are never validated and place no scalar constraint on render-time
+values, so structured values aimed at another renderer are not rejected by a
+deselected Kustomize source. Rejected values never reach a build or the
+output cache, so a warm cache (including one configured with a constant
+custom key) cannot suppress the error.
 
 ## Pipeline and metadata
 
