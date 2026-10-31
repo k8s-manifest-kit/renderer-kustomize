@@ -1,7 +1,7 @@
 # Filesystem Adapters
 
 The Kustomize renderer can work with the filesystem implementations in
-`pkg/util/fs` or with an adapter around another filesystem library.
+`pkg/fs` or with an adapter around another filesystem library.
 
 ## Public filesystem constructors
 
@@ -25,7 +25,7 @@ adding a new adapter.
 
 ## Union overlays
 
-Use `pkg/util/fs/union` for a base filesystem with virtual replacements:
+Use `pkg/fs/union` for a base filesystem with virtual replacements:
 
 ```go
 overlay, err := union.NewFs(base,

@@ -70,9 +70,9 @@ rebuilt through the normal Kustomize build, picking up filesystem changes.
 
 ## Filesystem support
 
-The public filesystem helpers are in `pkg/util/fs`: `NewFsOnDisk`,
+The public filesystem helpers are in `pkg/fs`: `NewFsOnDisk`,
 `NewMemoryFs`, `NewReadOnlyFs`, `NewFromIOFS`, and `NewBasePathFs`. Union
-overlays are in `pkg/util/fs/union` and are created with `union.NewFs` plus
+overlays are in `pkg/fs/union` and are created with `union.NewFs` plus
 `union.WithOverride`, `union.WithOverrides`, or `union.WithOverlayFs`.
 
 See [`../AGENTS.md`](../AGENTS.md), [`development.md`](development.md), and

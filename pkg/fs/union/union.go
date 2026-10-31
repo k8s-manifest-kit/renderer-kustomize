@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/afero"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs"
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/adapter"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/adapter"
 )
 
 // Option is a functional option for configuring a union filesystem.

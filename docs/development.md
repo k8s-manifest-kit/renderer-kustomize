@@ -24,8 +24,8 @@ offline.
 - `pkg/kustomize_engine.go` — Kustomize build and filesystem preparation.
 - `pkg/kustomize_support.go` — shared implementation helpers.
 - `pkg/kustomize_option.go` — renderer options and defaults.
-- `pkg/util/fs/` — filesystem constructors and adapters.
-- `pkg/util/fs/union/` — overlay filesystem implementation.
+- `pkg/fs/` — filesystem constructors and adapters.
+- `pkg/fs/union/` — overlay filesystem implementation.
 
 Renderer options are typed by the shared
 `github.com/k8s-manifest-kit/pkg/util/option` package. The layout follows the
@@ -115,7 +115,7 @@ values overlay, cache handling, source isolation, or output cloning.
 - Overlapping `Process` calls on one shared renderer are safe: the virtual
   `values.yaml` overlay is created for that render and never written to the
   base filesystem, which is treated as immutable input. Use the read-only
-  and union adapters in `pkg/util/fs` for custom filesystems.
+  and union adapters in `pkg/fs` for custom filesystems.
 - User-supplied code — `Values` functions, source selectors, cache key
   functions, KRM and builtin plugins, and post-renderers — runs inside
   concurrent renders and must itself be safe for concurrent use; the

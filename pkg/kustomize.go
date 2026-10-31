@@ -12,7 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs"
 )
 
 const rendererType = "kustomize"

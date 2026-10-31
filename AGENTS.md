@@ -27,7 +27,7 @@ The default load restriction is `LoadRestrictionsRootOnly`. Function plugins req
 
 ## Filesystems
 
-Use `pkg/util/fs` constructors such as `NewFsOnDisk`, `NewMemoryFs`, `NewReadOnlyFs`, `NewFromIOFS`, and `NewBasePathFs`. Union overlays are in `pkg/util/fs/union` and use `union.NewFs` with `WithOverride`, `WithOverrides`, or `WithOverlayFs`.
+Use `pkg/fs` constructors such as `NewFsOnDisk`, `NewMemoryFs`, `NewReadOnlyFs`, `NewFromIOFS`, and `NewBasePathFs`. Union overlays are in `pkg/fs/union` and use `union.NewFs` with `WithOverride`, `WithOverrides`, or `WithOverlayFs`.
 
 ## Development
 

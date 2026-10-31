@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/util/fs/union"
+	"github.com/k8s-manifest-kit/renderer-kustomize/pkg/fs/union"
 )
 
 type (
