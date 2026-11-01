@@ -1,15 +1,307 @@
 package kustomize_test
 
 import (
+	"fmt"
+	"maps"
 	"path/filepath"
 	"testing"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/k8s"
+	"sigs.k8s.io/kustomize/api/resmap"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	kustomize "github.com/k8s-manifest-kit/renderer-kustomize/pkg"
 
 	. "github.com/onsi/gomega"
 )
+
+// upstreamOriginKey is the annotation kustomize uses to track resource
+// origins when originAnnotations build metadata is enabled.
+const upstreamOriginKey = "config.kubernetes.io/origin"
+
+// seededOriginKustomization is a plain kustomization without build metadata;
+// the renderer injects originAnnotations itself when source annotations are
+// enabled.
+const seededOriginKustomization = `
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- configmap.yaml
+`
+
+// explicitOriginKustomization requests originAnnotations itself, so the
+// upstream origin annotation is user-requested and must survive rendering.
+const explicitOriginKustomization = `
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+buildMetadata:
+- originAnnotations
+
+resources:
+- configmap.yaml
+`
+
+// seededOriginConfigMap ships its own annotations, including a kit-managed
+// source.file, to distinguish preservation from explicit empty overwrites
+// when the renderer applies conditional file provenance.
+const seededOriginConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: origin-config
+  annotations:
+    existing: annotation
+    manifests.k8s-manifests-kit/source.file: seeded/path.yaml
+data:
+  key: value
+`
+
+// pluginTransformer adapts a function to the kustomize plugin seam.
+type pluginTransformer func(resmap.ResMap) error
+
+// Transform implements resmap.Transformer.
+func (f pluginTransformer) Transform(m resmap.ResMap) error {
+	return f(m)
+}
+
+// rewriteOriginAnnotation returns a kustomize plugin transformer that
+// replaces the upstream origin annotation of every resource with the given
+// raw value, or removes it when the value is empty.
+func rewriteOriginAnnotation(value string) resmap.Transformer {
+	return pluginTransformer(func(m resmap.ResMap) error {
+		for _, res := range m.Resources() {
+			annotations := res.GetAnnotations()
+			if value == "" {
+				delete(annotations, upstreamOriginKey)
+			} else {
+				annotations[upstreamOriginKey] = value
+			}
+
+			if err := res.SetAnnotations(annotations); err != nil {
+				return fmt.Errorf("failed to rewrite origin annotations: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// setupSeededKustomization writes a kustomization directory whose single
+// ConfigMap carries seeded source.file metadata.
+func setupSeededKustomization(t *testing.T, kustomization string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeFile(t, dir, "kustomization.yaml", kustomization)
+	writeFile(t, dir, "configmap.yaml", seededOriginConfigMap)
+
+	return dir
+}
+
+// renderKustomization renders the directory with the given options.
+func renderKustomization(t *testing.T, dir string, opts ...kustomize.RendererOption) []unstructured.Unstructured {
+	t.Helper()
+
+	g := NewWithT(t)
+
+	renderer, err := kustomize.New([]kustomize.Source{{Path: dir}}, opts...)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objects, err := renderer.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	return objects
+}
+
+// hashOver returns the content hash of the object with its content-hash and
+// render-origin annotations replaced by the given upstream origin annotation
+// value (or with the upstream annotation removed when the value is empty),
+// reconstructing the exact hash input at conversion time.
+func hashOver(t *testing.T, object unstructured.Unstructured, upstreamOrigin string) string {
+	t.Helper()
+
+	expected := object.DeepCopy()
+	annotations := maps.Clone(object.GetAnnotations())
+	g := NewWithT(t)
+	g.Expect(annotations).NotTo(BeNil())
+
+	delete(annotations, types.AnnotationContentHash)
+	delete(annotations, types.AnnotationRenderOrigin)
+	if upstreamOrigin == "" {
+		delete(annotations, upstreamOriginKey)
+	} else {
+		annotations[upstreamOriginKey] = upstreamOrigin
+	}
+
+	expected.SetAnnotations(annotations)
+
+	return k8s.ContentHash(expected)
+}
+
+// TestOriginAnnotationApplication characterizes how upstream origin
+// annotations, seeded source.file metadata, content hashes, and origin
+// cleanup interact during conversion.
+func TestOriginAnnotationApplication(t *testing.T) {
+
+	t.Run("explicitly requested origin remains and is hashed with the object", func(t *testing.T) {
+		g := NewWithT(t)
+
+		dir := setupSeededKustomization(t, explicitOriginKustomization)
+		objects := renderKustomization(t, dir, kustomize.WithSourceAnnotations(true))
+
+		g.Expect(objects).To(HaveLen(1))
+
+		annotations := objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, dir))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, "configmap.yaml"))
+		g.Expect(annotations).To(HaveKeyWithValue("existing", "annotation"))
+		g.Expect(annotations).To(HaveKey(upstreamOriginKey))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
+
+		upstream := annotations[upstreamOriginKey]
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			hashOver(t, objects[0], upstream),
+		))
+	})
+
+	t.Run("injected origin is hashed before cleanup and then removed", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// The upstream origin annotation value is a relative path, so the
+		// value kustomize generates for the explicit render is exactly the
+		// value that was present while the injected render was hashed.
+		explicit := renderKustomization(
+			t,
+			setupSeededKustomization(t, explicitOriginKustomization),
+			kustomize.WithSourceAnnotations(true),
+		)
+		upstream := explicit[0].GetAnnotations()[upstreamOriginKey]
+		g.Expect(upstream).NotTo(BeEmpty())
+
+		injectedDir := setupSeededKustomization(t, seededOriginKustomization)
+		injected := renderKustomization(t, injectedDir, kustomize.WithSourceAnnotations(true))
+
+		g.Expect(explicit).To(HaveLen(1))
+		g.Expect(injected).To(HaveLen(1))
+
+		annotations := injected[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, injectedDir))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, "configmap.yaml"))
+		g.Expect(annotations).NotTo(HaveKey(upstreamOriginKey))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
+
+		// The hash was computed while the injected origin annotation was
+		// still present, before the cleanup removed it.
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			hashOver(t, injected[0], upstream),
+		))
+	})
+
+	t.Run("nil origin preserves seeded file metadata", func(t *testing.T) {
+		g := NewWithT(t)
+
+		dir := setupSeededKustomization(t, seededOriginKustomization)
+		objects := renderKustomization(t, dir,
+			kustomize.WithSourceAnnotations(true),
+			kustomize.WithPlugin(rewriteOriginAnnotation("")),
+		)
+
+		g.Expect(objects).To(HaveLen(1))
+
+		annotations := objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, dir))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, "seeded/path.yaml"))
+		g.Expect(annotations).To(HaveKeyWithValue("existing", "annotation"))
+		g.Expect(annotations).NotTo(HaveKey(upstreamOriginKey))
+
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			hashOver(t, objects[0], ""),
+		))
+	})
+
+	t.Run("malformed origin preserves seeded file metadata", func(t *testing.T) {
+		g := NewWithT(t)
+
+		const malformed = "[not, an, origin]"
+
+		dir := setupSeededKustomization(t, seededOriginKustomization)
+		objects := renderKustomization(t, dir,
+			kustomize.WithSourceAnnotations(true),
+			kustomize.WithPlugin(rewriteOriginAnnotation(malformed)),
+		)
+
+		g.Expect(objects).To(HaveLen(1))
+
+		annotations := objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, dir))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, "seeded/path.yaml"))
+		g.Expect(annotations).To(HaveKeyWithValue("existing", "annotation"))
+		g.Expect(annotations).NotTo(HaveKey(upstreamOriginKey))
+
+		// The malformed annotation was still part of the hash input.
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			hashOver(t, objects[0], malformed),
+		))
+	})
+
+	t.Run("parsed origin with empty path overwrites seeded file with an empty value", func(t *testing.T) {
+		g := NewWithT(t)
+
+		const emptyPathOrigin = "repo: https://example.com/repo"
+
+		dir := setupSeededKustomization(t, seededOriginKustomization)
+		objects := renderKustomization(t, dir,
+			kustomize.WithSourceAnnotations(true),
+			kustomize.WithPlugin(rewriteOriginAnnotation(emptyPathOrigin)),
+		)
+
+		g.Expect(objects).To(HaveLen(1))
+
+		annotations := objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, dir))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, ""))
+		g.Expect(annotations).To(HaveKeyWithValue("existing", "annotation"))
+		g.Expect(annotations).NotTo(HaveKey(upstreamOriginKey))
+
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			hashOver(t, objects[0], emptyPathOrigin),
+		))
+	})
+
+	t.Run("source annotations without content hash leave no hash key", func(t *testing.T) {
+		g := NewWithT(t)
+
+		objects := renderKustomization(
+			t,
+			setupSeededKustomization(t, seededOriginKustomization),
+			kustomize.WithSourceAnnotations(true),
+			kustomize.WithContentHash(false),
+		)
+
+		g.Expect(objects).To(HaveLen(1))
+
+		annotations := objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "kustomize"))
+		g.Expect(annotations).To(HaveKey(types.AnnotationSourcePath))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceFile, "configmap.yaml"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
+		g.Expect(annotations).NotTo(HaveKey(types.AnnotationContentHash))
+	})
+}
 
 func TestSourceAnnotations(t *testing.T) {
 

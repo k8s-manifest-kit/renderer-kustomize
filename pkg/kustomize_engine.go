@@ -168,31 +168,26 @@ func (e *Engine) prepareFilesystem(
 	return fsys, addedOriginAnnotations, nil
 }
 
-// addSourceAnnotationsToObject adds source tracking annotations to a single unstructured object.
-// Only modifies the object if source annotations are enabled in engine options.
-// Removes config.kubernetes.io/origin annotation if addedOriginAnnotations is true.
-func (e *Engine) addSourceAnnotationsToObject(
-	obj *unstructured.Unstructured,
+// sourceAnnotationOption builds the source-annotation option for a single
+// converted resource. Origin extraction stays local: the file key is only
+// included when the resource carries a parsable, non-nil upstream origin, so
+// a pre-existing file annotation survives origin parse errors and nil
+// origins, while a successfully parsed empty path overwrites it with an
+// empty value.
+func (e *Engine) sourceAnnotationOption(
 	inputPath string,
 	res resource,
-) {
-	if !e.opts.SourceAnnotations {
-		return
+) types.AnnotationOption {
+	annotations := map[string]string{
+		types.AnnotationSourceType: rendererType,
+		types.AnnotationSourcePath: inputPath,
 	}
-
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[types.AnnotationSourceType] = rendererType
-	annotations[types.AnnotationSourcePath] = inputPath
 
 	if origin, err := res.GetOrigin(); err == nil && origin != nil {
 		annotations[types.AnnotationSourceFile] = origin.Path
 	}
 
-	obj.SetAnnotations(annotations)
+	return types.WithSourceAnnotations(annotations)
 }
 
 // removeOriginAnnotation removes the config.kubernetes.io/origin annotation from an object.
@@ -225,11 +220,17 @@ func (e *Engine) convertResources(
 			return nil, fmt.Errorf("failed to convert map to unstructured for resource %s: %w", res.CurId(), err)
 		}
 
-		e.addSourceAnnotationsToObject(&result[i], inputPath, res)
+		var opts []types.AnnotationOption
+
+		if e.opts.SourceAnnotations {
+			opts = append(opts, e.sourceAnnotationOption(inputPath, res))
+		}
 
 		if e.opts.ContentHash {
-			types.SetContentHash(&result[i])
+			opts = append(opts, types.WithContentHash(true))
 		}
+
+		types.AnnotateObjects(result[i:i+1], opts...)
 	}
 
 	return result, nil

@@ -224,7 +224,5 @@ func (r *Renderer) addRenderOrigin(
 		return
 	}
 
-	for i := range objects {
-		types.SetRenderOrigin(&objects[i], origin)
-	}
+	types.AnnotateObjects(objects, types.WithRenderOrigin(origin))
 }
