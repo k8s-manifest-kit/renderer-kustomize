@@ -42,4 +42,4 @@ make lint/fix
 make check
 ```
 
-Use the checked-in fixtures under `config/test/kustomizations`, test filesystem behavior in its package, and use `t.Context()` and Gomega in renderer tests.
+Use the checked-in fixtures under `config/test/kustomizations`, test filesystem behavior in its package, and use `t.Context()` and Gomega in renderer tests. Keep tests focused and simple: use the smallest local fixture that exercises the behavior, and add helpers or extra test files only when a concrete behavior or regression requires them.

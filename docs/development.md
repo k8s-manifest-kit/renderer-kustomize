@@ -84,6 +84,23 @@ kind: ConfigMap
   results are deep-cloned when stored and retrieved, so mutating one render
   must never affect another.
 
+### Test simplicity
+
+Use the simplest test that proves the contract under test. Don't re-test
+standard-library internals, and don't add helpers, mocks, instrumentation,
+subprocesses, or extra test files unless a concrete behavior or regression
+requires them. Keep small suites cohesive in one test file; the
+[concern-suffixed layout](#test-layout) below describes where a justified
+split goes, not a requirement to create those files.
+
+Keep fixtures proportional to the behavior under test: prefer the smallest
+existing local Kustomization — from `config/test/kustomizations`,
+`fstest.MapFS`, or an in-memory adapter — that exercises it, reuse existing
+fixtures before creating new ones, and don't invent speculative edge-case
+matrices. The generated-values, load-restriction, selected-source,
+ownership, cache-isolation, and concurrency requirements above and below
+are unchanged by this rule.
+
 ### Test layout
 
 - Colocate tests with implementation: a `test/` subdirectory is a separate
