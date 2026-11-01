@@ -1,3 +1,8 @@
+// Renderer-level cache behavior: per-source output isolation and cache-hit
+// behavior through kustomize.New and Process, including sources under
+// different load restrictions. Unit tests of the cache constructor and its
+// key wiring live in pkg/cache.
+
 package kustomize_test
 
 import (
