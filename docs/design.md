@@ -77,5 +77,35 @@ The public filesystem helpers are in `pkg/fs`: `NewFsOnDisk`,
 overlays are in `pkg/fs/union` and are created with `union.NewFs` plus
 `union.WithOverride`, `union.WithOverrides`, or `union.WithOverlayFs`.
 
+## Remote URL transport ownership
+
+Kustomize resolves remote resources referenced by a Kustomization — for
+example, remote component or resource URLs — through its own loader, not
+through any client this renderer supplies. At the pinned dependency version,
+`sigs.k8s.io/kustomize/api v0.21.3`, the call path is:
+
+- `pkg/kustomize_engine.go` builds a `krusty.Kustomizer` from
+  `krusty.Options` and calls `Kustomizer.Run`.
+- [`Kustomizer.Run`](https://github.com/kubernetes-sigs/kustomize/blob/api/v0.21.3/api/krusty/kustomizer.go)
+  constructs the file loader internally; callers cannot pass one in.
+- [`FileLoader.Load`](https://github.com/kubernetes-sigs/kustomize/blob/api/v0.21.3/api/internal/loader/fileloader.go)
+  dispatches remote paths to the private `httpClientGetContent` method,
+  which falls back to a fresh `&http.Client{}` when the loader's private
+  `http` field is unset.
+
+[`krusty.Options`](https://github.com/kubernetes-sigs/kustomize/blob/api/v0.21.3/api/krusty/options.go)
+exposes no HTTP client field, so this renderer's public API cannot inject,
+replace, or configure the client used for remote fetches. The fallback
+`&http.Client{}` has a nil `Transport`, which the standard library resolves
+to the shared, process-wide `http.DefaultTransport` — an instance this
+repository neither owns nor manages.
+
+Rendering local or in-memory Kustomize sources does not invoke this URL
+fetch path. When a Kustomization does reference remote URLs, the fetch runs
+on the dependency-owned default construction described above. This is a
+known limitation of the pinned upstream version, not a defect in this
+renderer, and the shared `pkg/util/httpclient` factories do not reach it.
+See [`development.md`](development.md) for the policy that follows from it.
+
 See [`../AGENTS.md`](../AGENTS.md), [`development.md`](development.md), and
 [`fs-adapter.md`](fs-adapter.md).

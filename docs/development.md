@@ -135,5 +135,32 @@ Regression anchors for these boundaries: `TestRenderTimeValueValidation` in
 error privacy), `TestCacheSourceIsolation` in `pkg/kustomize_cache_test.go`,
 and `TestConcurrentRendering` in `pkg/kustomize_concurrency_test.go`.
 
+## HTTP client boundary
+
+First-party code constructs HTTP clients from explicit standard-library
+fields — see the shared `github.com/k8s-manifest-kit/pkg/util/httpclient`
+package — and never reads, copies, or mutates `http.DefaultClient` or
+`http.DefaultTransport`. The Kustomize remote-URL fetch path is a
+dependency-owned exception to that policy, not a first-party instance.
+
+At the pinned `sigs.k8s.io/kustomize/api v0.21.3`, the internal loader's
+`httpClientGetContent` falls back to `&http.Client{}` (whose nil
+`Transport` resolves to the shared `http.DefaultTransport`),
+[`krusty.Options`](https://github.com/kubernetes-sigs/kustomize/blob/api/v0.21.3/api/krusty/options.go)
+has no HTTP client hook, and
+[`Kustomizer.Run`](https://github.com/kubernetes-sigs/kustomize/blob/api/v0.21.3/api/krusty/kustomizer.go)
+constructs the loader internally. See
+[design.md](design.md#remote-url-transport-ownership) for the full call
+path.
+
+Do not work around this boundary by forking or vendoring the loader,
+importing `sigs.k8s.io/kustomize/api/internal` packages, adding a `replace`
+directive, or monkeypatching process globals such as
+`http.DefaultTransport` — including in tests. Rendering local or in-memory
+sources does not use the remote-fetch path, so no workaround is needed for
+them. Do not claim that the private dependency client is configurable
+through this renderer's API, or that the shared HTTP factories give
+dependency internals instance isolation; they do not reach this path.
+
 See [`design.md`](design.md), [`fs-adapter.md`](fs-adapter.md), and
 [`../AGENTS.md`](../AGENTS.md).
