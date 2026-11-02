@@ -85,9 +85,11 @@ type RendererOptions struct {
 	// Applying a RendererOptions struct replaces this field including with
 	// its zero value LoadRestrictionsUnknown, discarding the constructor's
 	// RootOnly default. With the renderer-wide value Unknown, only a
-	// source-level restriction governs, and a source that also leaves it
-	// Unknown falls back to kustomize's own default behavior. A struct that
-	// wants root-only loading must set it explicitly.
+	// source-level restriction governs; a source that also leaves it
+	// Unknown is built with kustomize's unrestricted loader, because
+	// kustomize's Run treats every value other than RootOnly as
+	// RestrictionNone, so files outside the kustomization root may be
+	// loaded. A struct that wants root-only loading must set it explicitly.
 	LoadRestrictions kustomizetypes.LoadRestrictions
 
 	// WarningHandler is called when kustomize deprecation warnings are detected.

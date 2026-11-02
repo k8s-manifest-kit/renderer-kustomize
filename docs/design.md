@@ -86,9 +86,11 @@ renderer, _ := kustomize.New(sources,
 
 Because the zero value of `LoadRestrictions` is `LoadRestrictionsUnknown` —
 not `LoadRestrictionsRootOnly` — a struct that omits the field falls back to
-the source-level restriction or kustomize's own default rather than the
-constructor's root-only default; set it explicitly when that matters for
-security. The same explicitness applies to `ContentHash: true`. These rules
+the source-level restriction, and when both are Unknown kustomize builds
+with its unrestricted loader: its `Run` treats every value other than
+`RootOnly` as `RestrictionNone`, so resources outside the kustomization root
+may be loaded. Set it explicitly when that matters for security. The same
+explicitness applies to `ContentHash: true`. These rules
 govern the renderer's own options only — the engine's additive options
 (`engine.WithFilter` and friends) follow the engine's rules, not these.
 
@@ -107,15 +109,19 @@ request `originAnnotations` build metadata, the renderer adds that metadata
 so Kustomize stamps upstream origin annotations during the build; those
 upstream annotations are still present at hashing time and removed
 afterwards, so the stored digest does not match the final returned object in
-that case. An upstream origin the Kustomization requests itself — or any
-pre-existing annotation — is not removed and also participates in the hash.
+that case. The cleanup removes `config.kubernetes.io/origin` from every
+object unconditionally, so an origin annotation a resource carried for
+other reasons is removed too. When the Kustomization requests
+`originAnnotations` itself, the renderer injects nothing and removes
+nothing: the upstream origins stay on the objects and participate in the
+hash.
 
 Consequences callers can rely on: the hash covers the complete object at
 hashing time, including any metadata already present. It is not a hash of
 the Kustomization's source bytes, and it is not idempotent. The render-origin
 stamp and cache retrieval never rehash, and mutations made by later hooks
 need not match the stored digest. The full annotation phase contract is the
-engine's [annotation contract](../../engine/docs/design.md#annotations);
+engine's [annotation contract](https://github.com/k8s-manifest-kit/engine/blob/main/docs/design.md#annotations);
 this renderer follows it at the points described above.
 
 ## Output cache
