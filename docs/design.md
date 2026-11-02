@@ -52,6 +52,72 @@ transformers, and post-renderers. Source annotations are opt-in. Content hash
 annotations use `manifests.k8s-manifests-kit/content.hash` and are enabled by
 default.
 
+### Option composition
+
+Renderer options apply left to right. Functional options touch a single
+field — `WithFilter`, `WithTransformer`, `WithPostRenderer`,
+`WithSourceSelector`, and `WithPlugin` append, and the remaining setters
+overwrite only their own field — so they compose with anything around them.
+A `RendererOptions` struct is stronger: it replaces the hook, selector,
+plugin, load-restriction, warning-handler, and boolean fields outright
+(including with nil, the zero value, and false), while nil `CacheOptions`,
+`FileSystem`, and plugin-loading pointers preserve what earlier options
+configured.
+
+A hook before a struct survives only if the struct carries it; a hook after
+a struct is kept:
+
+```go
+// The struct clears the filter added before it. Its zero-valued Filters
+// and ContentHash replace the previous state, and its zero-valued
+// LoadRestrictions (LoadRestrictionsUnknown) discards the constructor's
+// RootOnly default — so a struct that wants those defaults must set them
+// explicitly.
+renderer, _ := kustomize.New(sources,
+    kustomize.WithFilter(keepPods),
+    kustomize.RendererOptions{
+        SourceAnnotations: true,
+        ContentHash:       true, // retain the hashing default
+        LoadRestrictions:  kustomizetypes.LoadRestrictionsRootOnly, // retain root-only loading
+    },
+    kustomize.WithPostRenderer(label), // appended to the struct's state
+)
+```
+
+Because the zero value of `LoadRestrictions` is `LoadRestrictionsUnknown` —
+not `LoadRestrictionsRootOnly` — a struct that omits the field falls back to
+the source-level restriction or kustomize's own default rather than the
+constructor's root-only default; set it explicitly when that matters for
+security. The same explicitness applies to `ContentHash: true`. These rules
+govern the renderer's own options only — the engine's additive options
+(`engine.WithFilter` and friends) follow the engine's rules, not these.
+
+### Hash stages
+
+On a cache miss, each built resource is hashed during conversion from
+Kustomize's ResMap: after the renderer's source-annotation phase (when
+enabled) and before `Run` removes the renderer-added upstream
+`config.kubernetes.io/origin` annotation. Only afterwards are the results
+stored in the source's output cache (when enabled) and stamped with their
+render origin, and the source, renderer, and engine hooks run last — none of
+those stages rehash.
+
+When source annotations are enabled and the Kustomization does not already
+request `originAnnotations` build metadata, the renderer adds that metadata
+so Kustomize stamps upstream origin annotations during the build; those
+upstream annotations are still present at hashing time and removed
+afterwards, so the stored digest does not match the final returned object in
+that case. An upstream origin the Kustomization requests itself — or any
+pre-existing annotation — is not removed and also participates in the hash.
+
+Consequences callers can rely on: the hash covers the complete object at
+hashing time, including any metadata already present. It is not a hash of
+the Kustomization's source bytes, and it is not idempotent. The render-origin
+stamp and cache retrieval never rehash, and mutations made by later hooks
+need not match the stored digest. The full annotation phase contract is the
+engine's [annotation contract](../../engine/docs/design.md#annotations);
+this renderer follows it at the points described above.
+
 ## Output cache
 
 Render-result caching is opt-in via `WithCache`. Every registered source
