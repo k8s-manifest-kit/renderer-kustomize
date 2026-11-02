@@ -11,6 +11,8 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	kustomize "github.com/k8s-manifest-kit/renderer-kustomize/pkg"
 
 	. "github.com/onsi/gomega"
@@ -425,4 +427,48 @@ func TestValuesConfigMap(t *testing.T) {
 		valuesPath := filepath.Join(dir, "values.yaml")
 		g.Expect(valuesPath).ToNot(BeAnExistingFile())
 	})
+}
+
+// TestProcessNilRenderer verifies that a typed-nil Kustomize Renderer
+// answers the sentinel instead of panicking when Process is called directly.
+func TestProcessNilRenderer(t *testing.T) {
+	g := NewWithT(t)
+
+	var renderer *kustomize.Renderer
+
+	objects, err := renderer.Process(t.Context(), nil)
+
+	g.Expect(err).To(MatchError(types.ErrRendererNil))
+	g.Expect(objects).To(BeNil())
+}
+
+// TestSourcePostRendererChainIndex verifies that a failing source-specific
+// post-renderer reports the adopted engine chain index while preserving the
+// cause and the kustomize path context.
+func TestSourcePostRendererChainIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	errHook := errors.New("hook failed")
+
+	dir := setupValuesKustomization(t)
+
+	renderer, err := kustomize.New([]kustomize.Source{
+		{
+			Path: dir,
+			PostRenderers: []types.PostRenderer{
+				func(_ context.Context, _ []unstructured.Unstructured) ([]unstructured.Unstructured, error) {
+					return nil, errHook
+				},
+			},
+		},
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objects, err := renderer.Process(t.Context(), types.Values{"hook": "value"})
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, errHook)).To(BeTrue(), "the hook cause stays discoverable")
+	g.Expect(err.Error()).To(ContainSubstring("post-renderer error at chain index 0"))
+	g.Expect(err.Error()).To(ContainSubstring("source post-renderer error for kustomize path"))
+	g.Expect(objects).To(BeNil())
 }

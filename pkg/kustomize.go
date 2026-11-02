@@ -113,6 +113,9 @@ func (r *Renderer) Name() string {
 
 // Process implements types.Renderer by rendering the kustomize resources and applying filters and transformers.
 //
+// A nil *Renderer returns types.ErrRendererNil with no objects instead of
+// panicking; Name and the constructors are unaffected by a nil receiver.
+//
 // Render-time values must be scalars (string, bool, integer, or finite
 // float). They are merged over the source's values and exposed through the
 // virtual values.yaml ConfigMap. Any other value type returns an error
@@ -120,6 +123,10 @@ func (r *Renderer) Name() string {
 // rendering or cache lookup. Validation applies per selected source:
 // sources removed by source selectors do not constrain render-time values.
 func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) ([]unstructured.Unstructured, error) {
+	if r == nil {
+		return nil, types.ErrRendererNil
+	}
+
 	allObjects := make([]unstructured.Unstructured, 0)
 
 	for _, holder := range r.inputs {
