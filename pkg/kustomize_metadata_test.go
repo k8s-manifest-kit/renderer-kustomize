@@ -1,11 +1,14 @@
 package kustomize_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"testing"
 
+	engine "github.com/k8s-manifest-kit/engine/pkg"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/k8s"
 	"sigs.k8s.io/kustomize/api/resmap"
@@ -56,6 +59,67 @@ metadata:
   annotations:
     existing: annotation
     manifests.k8s-manifests-kit/source.file: seeded/path.yaml
+data:
+  key: value
+`
+
+// engineCompareKustomization is a plain resource-only kustomization shared by
+// both engine-comparison fixtures: no build metadata, values, generators,
+// plugins, or transformations.
+const engineCompareKustomization = `
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- configmap.yaml
+`
+
+// engineCompareFirstConfigMap is the first engine-comparison resource. Both
+// renderers share the same type name, so the ordered outputs stay
+// distinguishable by fixture identity rather than by renderer name.
+const engineCompareFirstConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: engine-compare-first
+  annotations:
+    note: first
+data:
+  key: first-value
+`
+
+// engineCompareSecondConfigMap is the second engine-comparison resource.
+const engineCompareSecondConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: engine-compare-second
+  annotations:
+    note: second
+data:
+  key: second-value
+`
+
+// reingestKustomization is the plain resource-only kustomization used by both
+// re-ingest stages: no build metadata, values, generators, plugins, or
+// transformations.
+const reingestKustomization = `
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- configmap.yaml
+`
+
+// reingestConfigMap is the minimal first-stage re-ingest fixture: a stable
+// name, string data, and one ordinary user annotation.
+const reingestConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reingest-config
+  annotations:
+    note: ordinary-user-annotation
 data:
   key: value
 `
@@ -115,6 +179,17 @@ func renderKustomization(t *testing.T, dir string, opts ...kustomize.RendererOpt
 	g.Expect(err).ToNot(HaveOccurred())
 
 	return objects
+}
+
+// deepCopyObjects returns an independent deep copy of an ordered object
+// batch, so later renders cannot mutate a retained snapshot.
+func deepCopyObjects(objects []unstructured.Unstructured) []unstructured.Unstructured {
+	copies := make([]unstructured.Unstructured, len(objects))
+	for i := range objects {
+		copies[i] = *objects[i].DeepCopy()
+	}
+
+	return copies
 }
 
 // hashOver returns the content hash of the object with its content-hash and
@@ -301,6 +376,157 @@ func TestOriginAnnotationApplication(t *testing.T) {
 		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
 		g.Expect(annotations).NotTo(HaveKey(types.AnnotationContentHash))
 	})
+}
+
+// TestEngineCompositionHashPreservation pins that two real Kustomize
+// renderers produce exactly the same objects through the orchestration
+// engine as they do when processed directly — content hashes, source
+// annotations, and render origins included — on every uncached render, and
+// that engine runs never mutate the retained direct baselines. Hashes are
+// compared as rendered, never recomputed over the final output or normalized
+// by stripping upstream annotations.
+func TestEngineCompositionHashPreservation(t *testing.T) {
+	g := NewWithT(t)
+
+	firstDir := t.TempDir()
+	writeFile(t, firstDir, "kustomization.yaml", engineCompareKustomization)
+	writeFile(t, firstDir, "configmap.yaml", engineCompareFirstConfigMap)
+
+	secondDir := t.TempDir()
+	writeFile(t, secondDir, "kustomization.yaml", engineCompareKustomization)
+	writeFile(t, secondDir, "configmap.yaml", engineCompareSecondConfigMap)
+
+	first, err := kustomize.New(
+		[]kustomize.Source{{Path: firstDir}},
+		kustomize.WithSourceAnnotations(true),
+	)
+	g.Expect(err).ToNot(HaveOccurred(), "first renderer construction")
+
+	second, err := kustomize.New(
+		[]kustomize.Source{{Path: secondDir}},
+		kustomize.WithSourceAnnotations(true),
+	)
+	g.Expect(err).ToNot(HaveOccurred(), "second renderer construction")
+
+	baselineFirst, err := first.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred(), "direct first baseline render")
+
+	baselineSecond, err := second.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred(), "direct second baseline render")
+
+	g.Expect(baselineFirst).To(HaveLen(1))
+	g.Expect(baselineSecond).To(HaveLen(1))
+	g.Expect(baselineFirst[0].GetName()).To(Equal("engine-compare-first"))
+	g.Expect(baselineSecond[0].GetName()).To(Equal("engine-compare-second"))
+
+	baselines := []struct {
+		objects []unstructured.Unstructured
+		dir     string
+	}{
+		{objects: baselineFirst, dir: firstDir},
+		{objects: baselineSecond, dir: secondDir},
+	}
+
+	for i, baseline := range baselines {
+		annotations := baseline.objects[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationSourceType,
+			"kustomize",
+		), "baseline %d source type", i)
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationSourcePath,
+			baseline.dir,
+		), "baseline %d source path", i)
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationRenderOrigin,
+			types.RenderOriginLive,
+		), "baseline %d render origin", i)
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			MatchRegexp("^sha256:[0-9a-f]{64}$"),
+		), "baseline %d content hash", i)
+	}
+
+	expected := append(deepCopyObjects(baselineFirst), deepCopyObjects(baselineSecond)...)
+	firstSnapshot := deepCopyObjects(baselineFirst)
+	secondSnapshot := deepCopyObjects(baselineSecond)
+
+	e, err := engine.New(engine.WithRenderer(first), engine.WithRenderer(second))
+	g.Expect(err).ToNot(HaveOccurred(), "engine construction")
+
+	for pass := 1; pass <= 2; pass++ {
+		result, renderErr := e.Render(t.Context())
+		g.Expect(renderErr).ToNot(HaveOccurred(), "engine render pass %d", pass)
+		g.Expect(result).To(HaveLen(2), "engine render pass %d", pass)
+		g.Expect(result).To(Equal(expected), "engine render pass %d full result", pass)
+	}
+
+	g.Expect(baselineFirst).To(
+		Equal(firstSnapshot),
+		"first direct baseline snapshot after engine renders",
+	)
+	g.Expect(baselineSecond).To(
+		Equal(secondSnapshot),
+		"second direct baseline snapshot after engine renders",
+	)
+}
+
+// TestAnnotatedResourceReIngestion pins the exact one-hash behavior when an
+// actual annotated first-stage output is re-ingested as a plain resource: the
+// second hash covers the first hash and differs from it, the fixed
+// second-stage input renders deterministically across two uncached passes,
+// and no source or origin metadata is injected on re-ingest.
+func TestAnnotatedResourceReIngestion(t *testing.T) {
+	g := NewWithT(t)
+
+	firstDir := t.TempDir()
+	writeFile(t, firstDir, "kustomization.yaml", reingestKustomization)
+	writeFile(t, firstDir, "configmap.yaml", reingestConfigMap)
+
+	first, err := kustomize.New([]kustomize.Source{{Path: firstDir}})
+	g.Expect(err).ToNot(HaveOccurred(), "first-stage renderer construction")
+
+	firstObjects, err := first.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred(), "first-stage render")
+	g.Expect(firstObjects).To(HaveLen(1))
+
+	firstHash := firstObjects[0].GetAnnotations()[types.AnnotationContentHash]
+	g.Expect(firstHash).NotTo(BeEmpty(), "first-stage content hash annotation")
+
+	frozen := firstObjects[0].DeepCopy()
+
+	resourceBytes, err := json.Marshal(frozen.Object)
+	g.Expect(err).ToNot(HaveOccurred(), "marshaling the annotated first output")
+
+	secondDir := t.TempDir()
+	writeFile(t, secondDir, "kustomization.yaml", reingestKustomization)
+	writeFile(t, secondDir, "configmap.yaml", string(resourceBytes))
+
+	expectedHash := k8s.ContentHash(frozen.DeepCopy())
+
+	expected := frozen.DeepCopy()
+	expectedAnnotations := maps.Clone(expected.GetAnnotations())
+	expectedAnnotations[types.AnnotationContentHash] = expectedHash
+	expected.SetAnnotations(expectedAnnotations)
+
+	g.Expect(expectedHash).NotTo(Equal(firstHash), "second hash must cover the first hash")
+
+	second, err := kustomize.New([]kustomize.Source{{Path: secondDir}})
+	g.Expect(err).ToNot(HaveOccurred(), "second-stage renderer construction")
+
+	for pass := 1; pass <= 2; pass++ {
+		objects, renderErr := second.Process(t.Context(), nil)
+		g.Expect(renderErr).ToNot(HaveOccurred(), "re-ingest render pass %d", pass)
+		g.Expect(objects).To(HaveLen(1), "re-ingest render pass %d", pass)
+		g.Expect(objects[0]).To(Equal(*expected), "full re-ingested object, pass %d", pass)
+	}
+
+	g.Expect(firstObjects[0]).To(Equal(*frozen), "first-stage output snapshot")
+
+	//nolint:gosec // G304: the path is a test-owned temp-dir fixture, not user input
+	stored, err := os.ReadFile(filepath.Join(secondDir, "configmap.yaml"))
+	g.Expect(err).ToNot(HaveOccurred(), "reading back the serialized resource")
+	g.Expect(stored).To(Equal(resourceBytes), "serialized resource bytes unchanged")
 }
 
 func TestSourceAnnotations(t *testing.T) {
