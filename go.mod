@@ -10,8 +10,8 @@ require (
 	github.com/rs/xid v1.6.0
 	github.com/spf13/afero v1.15.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
 	sigs.k8s.io/kustomize/api v0.21.3
 	sigs.k8s.io/kustomize/kyaml v0.21.3
 )
