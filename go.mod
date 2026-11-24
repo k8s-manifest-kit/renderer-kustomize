@@ -5,13 +5,13 @@ go 1.27.3
 require (
 	github.com/k8s-manifest-kit/engine v0.2.1-0.20261101182842-ce323740b8ae
 	github.com/k8s-manifest-kit/pkg v0.2.1-0.20261101181638-505646e06d80
-	github.com/lburgazzoli/gomega-matchers v0.6.1-0.20261030191553-1e92fbfadfd1
+	github.com/lburgazzoli/gomega-matchers v0.7.0
 	github.com/onsi/gomega v1.44.0
 	github.com/rs/xid v1.6.0
 	github.com/spf13/afero v1.15.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
 	sigs.k8s.io/kustomize/api v0.21.3
 	sigs.k8s.io/kustomize/kyaml v0.21.3
 )
@@ -26,7 +26,7 @@ require (
 	github.com/go-openapi/jsonreference v1.0.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/itchyny/gojq v0.12.19 // indirect
+	github.com/itchyny/gojq v0.12.20 // indirect
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
